@@ -27,7 +27,7 @@ also applies at L2); L3-only requirements are out of scope.
 | V4 API & Web Service | JSON content types, no transparent HTTP→HTTPS on the API | ⏳ triage |
 | V6 Authentication | delegated to Logto; passwords N/A if passwordless | ⏳ triage |
 | [V7 Session Management](V07-session-management.md) | BFF cookie + Logto session lifetimes | ✅ implemented |
-| [V8 Authorization](V08-authorization.md) | RequireAuthorization + global query filter + owner check | ⏳ partial (auth surface ✅; domain filter/owner checks planned) |
+| [V8 Authorization](V08-authorization.md) | RequireAuthorization + global query filter + owner check | ✅ read model (filter + anon-401 tested); owner-gated mutations planned |
 | [V9 Self-contained Tokens](V09-self-contained-tokens.md) | JWT validation hardening | ✅ implemented (tests planned) |
 | [V10 OAuth & OIDC](V10-oauth-and-oidc.md) | BFF token handling, dual-scheme, logout | ✅ implemented |
 | V11 Cryptography | delegated to Data Protection key ring / Logto / TLS | ⏳ triage |

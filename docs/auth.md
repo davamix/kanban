@@ -66,9 +66,10 @@ token is delivered to the SPA (cookie) so the logout form/header can submit it.
 
 ## Authorization — two trusted layers (ASVS V8)
 
-_(Implemented with the domain entities in the implementation phase.)_
+_(Layer 1 is implemented + tested for `Project`; layer 2 arrives with the project-creation
+screen's mutating endpoints. See [decisions/0003-project-domain.md](decisions/0003-project-domain.md).)_
 
-1. **EF Core global query filter** on the domain entities (`Project`/`Task`), keyed off
+1. **EF Core global query filter** on the domain entities (`Project`, and `Task` later), keyed off
    `ICurrentUser` injected into `KanbanDbContext`:
    `e.OwnerId == current || e.Assignees.Any(a => a.UserId == current)`.
    All reads are isolated at the DB layer → IDOR/BOLA blocked. An unset current user matches no

@@ -4,10 +4,9 @@
 
 ## Status summary
 
-⏳ **Partial.** The authenticated API surface (`RequireAuthorization` + the cookie/JWT default
-policy) is wired now. The **owner/assignee global query filter** and **owner checks** land with
-the domain entities (projects/tasks) in the implementation phase, pinned by cross-user forgery
-tests (see [../../testing.md](../../testing.md)).
+✅ **Implemented + tested** for the project read model; owner-gated mutations (V8.3) arrive with
+the project-creation screen. The owner/assignee global query filter and the anonymous-401 gate are
+pinned by [ProjectsEndpointTests](../../../tests/KanbanApi.IntegrationTests/ProjectsEndpointTests.cs).
 
 ---
 
@@ -22,18 +21,18 @@ tests (see [../../testing.md](../../testing.md)).
 
 | Req | L | State | Notes |
 |-----|---|-------|-------|
-| V8.2.1 | 1 | ✅ | `RequireAuthorization()` on every `/api/*` group + the cookie/JWT default policy in [Program.cs](../../../src/KanbanApi/Program.cs). Anonymous → 401. |
-| V8.2.2 | 1 | ⏳ | EF Core global query filter on `Project`/`Task` keyed off `ICurrentUser` — added with the domain entities in [KanbanDbContext.cs](../../../src/KanbanApi/Data/KanbanDbContext.cs). |
+| V8.2.1 | 1 | ✅ | `RequireAuthorization()` on every `/api/*` group + the cookie/JWT default policy in [Program.cs](../../../src/KanbanApi/Program.cs). Anonymous → 401 (`List_Anonymous_Returns401`). |
+| V8.2.2 | 1 | ✅ | EF Core global query filter on `Project` keyed off `ICurrentUser` ([KanbanDbContext.cs](../../../src/KanbanApi/Data/KanbanDbContext.cs)) — cross-user rows invisible; IDOR/BOLA blocked at the data layer (`List_ReturnsProjectsTheUserIsAssignedTo_MarkedAsShared`, `List_DoesNotReturnProjectsTheUserCannotSee_CrossUserForgery`). |
 | V8.2.3 | 2 | ➖ | No field-level (BOPLA) differentiation — same rationale as V8.1.2. |
 
 ## V8.3 — Operation-level authorization
 
 | Req | L | State | Notes |
 |-----|---|-------|-------|
-| V8.3.1 | 1 | ⏳ | Trusted-layer enforcement: endpoint `RequireAuthorization()` + owner check + DB query filter. Owner-only edit/delete/assign; visible-but-not-owner → 403, not-visible → 404. Implemented with the domain. |
+| V8.3.1 | 1 | ⏳ | Trusted-layer enforcement for mutations: endpoint `RequireAuthorization()` + owner check + DB query filter (owner-only edit/delete/assign; visible-but-not-owner → 403, not-visible → 404). Added with the project-creation screen — no mutating project endpoints yet. |
 
 ## V8.4 — Other considerations
 
 | Req | L | State | Notes |
 |-----|---|-------|-------|
-| V8.4.1 | 2 | ⏳ | Cross-user isolation: an unset `ICurrentUser` matches no row (fail closed); bypasses (`IgnoreQueryFilters()`) limited to seeding with a `// reason:`. Pinned by cross-user forgery tests. |
+| V8.4.1 | 2 | ✅ | Cross-user isolation: an unset `ICurrentUser` matches no row (fail closed). No `IgnoreQueryFilters()` bypasses. Pinned by the cross-user forgery test (`List_DoesNotReturnProjectsTheUserCannotSee_CrossUserForgery`). |

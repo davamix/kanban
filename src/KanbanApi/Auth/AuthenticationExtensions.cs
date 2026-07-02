@@ -31,6 +31,7 @@ public static class AuthenticationExtensions
         var name = ctx.Principal.FindFirst("name")?.Value ?? ctx.Principal.FindFirst("username")?.Value;
 
         var user = await db.Users.FindAsync(sub);
+        var isNewUser = user is null;
         if (user is null)
             db.Users.Add(new AppUser { Id = sub, Email = email, DisplayName = name });
         else
@@ -39,6 +40,12 @@ public static class AuthenticationExtensions
             user.DisplayName = name ?? user.DisplayName;
         }
         await db.SaveChangesAsync();
+
+        // Development only: give a first-time user an illustrative, populated board (the
+        // owner/assignee filter is per-user, so this has to be seeded for *this* user). Idempotent.
+        var env = ctx.HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
+        if (isNewUser && env.IsDevelopment())
+            await SampleData.SeedForUserAsync(db, sub, name);
     }
 
     public static void AddKanbanAuth(this WebApplicationBuilder builder)
