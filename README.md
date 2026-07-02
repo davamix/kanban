@@ -16,10 +16,12 @@ API. Data is persisted in **PostgreSQL**, and users sign in via **Logto**.
 - **Deployment:** standalone or integrated — [docs/deployment.md](docs/deployment.md).
 - **Decisions:** recorded as ADRs in [docs/decisions/](docs/decisions/).
 
-> **Status: infrastructure scaffold.** This repo currently contains the infrastructure and the
-> full Logto auth wiring (BFF cookie + JWT bearer, user directory, rate limiting, antiforgery).
-> The **kanban domain** (projects, tasks, boards/columns, drag-to-restatus) and its UI land in the
-> implementation phase — see [docs/decisions/0001-infrastructure-bootstrap.md](docs/decisions/0001-infrastructure-bootstrap.md).
+> **Status: first screen shipped.** On top of the infrastructure + full Logto auth wiring (BFF
+> cookie + JWT bearer, user directory, rate limiting, antiforgery), the **project-selection screen**
+> is live: `Project` domain + owner/assignee isolation + `GET /api/projects` + the dashboard SPA
+> (see [docs/decisions/0003-project-domain.md](docs/decisions/0003-project-domain.md)). Still to
+> come: project **create/edit** (+ mirroring into Calendar) and the **board** (columns, tasks,
+> drag-to-restatus).
 
 ---
 
@@ -69,16 +71,17 @@ Base URL: `http://localhost:8080`. **Every `/api/*` endpoint requires authentica
 browser via the BFF cookie, machine callers via a `Bearer` JWT (audience = the Kanban API
 resource, `https://kanban.api`).
 
-Currently available (infra phase):
+Currently available:
 
 | Method | Route                       | Description                                  |
 |--------|-----------------------------|----------------------------------------------|
+| `GET`  | `/api/projects`             | Projects the user owns or is assigned to     |
 | `GET`  | `/api/me`                   | The signed-in user                           |
 | `GET`  | `/api/users`                | User directory for the assignee picker       |
 | `GET`  | `/login`, `POST /logout`    | BFF sign-in / sign-out                       |
 | `GET`  | `/health`, `/openapi/v1.json` | Health probe / OpenAPI document            |
 
-The project/task/board CRUD surface is added in the implementation phase.
+Project create/edit + the task/board CRUD surface are added in the next screens.
 
 ---
 

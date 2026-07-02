@@ -3,17 +3,19 @@
 How to write and run Kanban's tests. The `integration-test-author` agent (added with the test
 suite) treats this as the source of truth. Mirrors the ecosystem's Calendar app.
 
-> **Infra-phase status:** the test projects below are added in the implementation phase alongside
-> the domain. This document is the target shape so the first tests land in the right structure.
+> **Status:** `tests/KanbanApi.IntegrationTests` exists (`ApiFactory` + Testcontainers Postgres +
+> `TestAuthHandler`), with the project read model's visibility/forgery proofs in
+> [ProjectsEndpointTests](../tests/KanbanApi.IntegrationTests/ProjectsEndpointTests.cs). A
+> `KanbanApi.UnitTests` project is added when there's pure logic to cover (validators, transitions).
 
-## Test projects (planned)
+## Test projects
 
 | Project | Kind | Use for |
 |---|---|---|
-| `tests/KanbanApi.UnitTests` | Unit (no host) | Pure logic — validators, `CurrentUser` claim resolution, status/column transitions |
+| `tests/KanbanApi.UnitTests` _(planned)_ | Unit (no host) | Pure logic — validators, `CurrentUser` claim resolution, status/column transitions |
 | `tests/KanbanApi.IntegrationTests` | HTTP integration | Endpoints, the access model, JWT validation, the directory |
 
-Add both projects to `Kanban.slnx` so `dotnet test Kanban.slnx` runs everything.
+Both projects are referenced by `Kanban.slnx` so `dotnet test Kanban.slnx` runs everything.
 
 ## Running
 
@@ -25,15 +27,16 @@ dotnet test tests/KanbanApi.IntegrationTests   # boots a Testcontainers Postgres
 
 Integration tests need a Docker daemon (the devcontainer has docker-in-docker).
 
-## Fixtures (planned)
+## Fixtures
 
 | Fixture | What it gives you |
 |---|---|
-| `ApiFactory` | Real Postgres + `TestAuthHandler` (auth as a test-user header), CSRF + Logto faked. Default for endpoint/authz tests. |
-| `JwtApiFactory` | Real `JwtBearer` validated against a local test key; `MintJwt(aud, sub)`. For audience/issuer tests. |
+| [`ApiFactory`](../tests/KanbanApi.IntegrationTests/Fixtures/ApiFactory.cs) | Real Postgres + `TestAuthHandler` (auth via the `X-Test-User` header), CSRF + Logto faked, env `Testing` (per-user seeding off). Default for endpoint/authz tests. |
+| `JwtApiFactory` _(planned)_ | Real `JwtBearer` validated against a local test key; `MintJwt(aud, sub)`. For audience/issuer tests. |
 
-- **`CreateClientAs("user-a")`** authenticates as that user (its value is the `sub`). No auth → `401`.
-- Each factory boots its own pgvector container in `InitializeAsync` and migrates on host start.
+- **`CreateClientAs("user-a")`** authenticates as that user (its value is the `sub`). No header → `401`.
+- **`WithDbAsync(...)`** runs a DbContext scope for test setup (insert users/projects).
+- The factory boots its own pgvector container in `InitializeAsync` and migrates on host start.
 
 ## Conventions
 

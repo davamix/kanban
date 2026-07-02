@@ -32,6 +32,9 @@ builder.AddKanbanAuth();
 // User directory (assignee picker) via the Logto Management API.
 builder.Services.AddLogtoManagementClient(builder.Configuration);
 
+// Project read/store (per-user isolation via the DbContext global query filter).
+builder.Services.AddScoped<IProjectStore, EfProjectStore>();
+
 // Serialize DateOnly/enums in a JSON-friendly way and emit OpenAPI metadata.
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -120,7 +123,8 @@ app.MapAuthEndpoints();
 // User directory for the assignee picker.
 app.MapUserEndpoints();
 
-// The kanban domain API (boards, columns, projects, tasks) is added in the implementation phase.
+// Project REST surface (project-selection screen: read side). Boards, columns, and tasks follow.
+app.MapProjectEndpoints();
 
 // Lightweight health probe for the container (anonymous).
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

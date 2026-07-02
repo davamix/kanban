@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/KanbanApi/KanbanApi.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KanbanApi.IntegrationTests/KanbanApi.IntegrationTests.csproj" />
+  </Folder>
 </Solution>
