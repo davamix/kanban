@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege by default; individual jobs widen only what they need.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive   # hydrate the .standards submodule
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore Kanban.slnx
+
+      - name: Build
+        run: dotnet build Kanban.slnx -c Release --no-restore
+
+      # Unit + integration tests. Integration tests use Testcontainers, which needs a Docker
+      # daemon — available on ubuntu-latest GitHub runners out of the box.
+      - name: Test
+        run: dotnet test Kanban.slnx -c Release --no-build
+
+      - name: Audit NuGet packages for known vulnerabilities
+        run: |
+          report=$(dotnet list Kanban.slnx package --vulnerable --include-transitive)
+          echo "$report"
+          if echo "$report" | grep -q "following vulnerable packages"; then
+            echo "::error::Vulnerable NuGet packages detected"
+            exit 1
+          fi
+
+  gitleaks:
+    name: Secret scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # full history so previously committed secrets are caught too
+
+      # Hard gate: fails the build if any secret is detected.
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trivy:
+    name: Vuln, secret & misconfig scan (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # upload SARIF to the Security tab (code scanning)
+    steps:
+      - uses: actions/checkout@v7
+
+      # Hard gate: fail on any HIGH/CRITICAL vuln/secret/misconfig finding.
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          # Apply the severity filter to the SARIF too, so exit-code only fires on
+          # HIGH/CRITICAL (otherwise the action reports — and gates on — all severities).
+          limit-severities-for-sarif: true
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: '1'
+
+      - name: Upload Trivy results to code scanning
+        if: always()   # publish even when the scan step fails the job
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-fs
+
+# ---------------------------------------------------------------------------
+# CD (image build + Trivy image scan) lives in cd.yml, triggered on tags /
+# manual dispatch. The actual deploy step there is still deferred (no target).
+# ---------------------------------------------------------------------------

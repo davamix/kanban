@@ -1,0 +1,26 @@
+## .NET build output
+bin/
+obj/
+out/
+publish/
+
+## IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Local tooling
+.claude/settings.local.json
+
+## Local secrets / environment (never commit; see .env.example for required names)
+.env
+
+## Tmp files
+tmp/
+## Local working files (not committed)
+tmp/

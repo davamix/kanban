@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Block commits that introduce secrets. Shared via core.hooksPath=.githooks
+# (set by .devcontainer/post-create.sh). CI re-scans full history as a backstop.
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "⚠ gitleaks not installed — skipping local secret scan (CI will still check)."
+  echo "  Rebuild the dev container or install gitleaks to enable the pre-commit guard."
+  exit 0
+fi
+
+gitleaks git --pre-commit --redact --staged --verbose

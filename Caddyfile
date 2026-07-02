@@ -1,0 +1,28 @@
+# Reverse proxy for the bundled (standalone) stack. One entry port (8080) fronts the app and
+# Logto so the OIDC issuer is a single hostname that BOTH the browser (via *.localhost → 127.0.0.1
+# + the forwarded 8080) and the app container (via the Docker network alias on this service)
+# resolve to the proxy. See docs/deployment.md. Production terminates TLS at the shared proxy.
+#
+# Standalone mode uses the app-scoped auth hosts below. In integrated mode the shared platform
+# proxy owns routing and Logto is reached at the ecosystem-neutral hosts (auth.localhost /
+# admin.localhost); see docs/ecosystem-integration.md §5 and .standards/architecture.md.
+{
+	admin off
+	auto_https off
+}
+
+# The kanban app — kept on the bare `localhost` host so Logto redirect URIs
+# (http://localhost:8080/signin-oidc) keep matching.
+http://localhost:8080 {
+	reverse_proxy kanban:8080
+}
+
+# Logto OIDC + Management API (both on Logto's core port 3001).
+http://auth.kanban.localhost:8080 {
+	reverse_proxy logto:3001
+}
+
+# Logto admin console.
+http://admin.kanban.localhost:8080 {
+	reverse_proxy logto:3002
+}

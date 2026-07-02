@@ -1,0 +1,107 @@
+services:
+  db:
+    # pgvector image (Postgres + the pgvector extension) so vector search is available
+    # later without a migration; we don't use any vector column yet.
+    image: pgvector/pgvector:pg17
+    container_name: kanban-db
+    # Bundled infrastructure — only started in standalone mode. In integrated mode the app
+    # points at the shared ecosystem Postgres instead. See docs/deployment.md.
+    profiles: ["standalone"]
+    environment:
+      - POSTGRES_DB=kanban
+      - POSTGRES_USER=kanban
+      # Bootstrap superuser password (admin / break-glass). Injected from .env, never committed.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Consumed by the init scripts in db/init to create the least-privilege app role and
+      # the bundled Logto database/role (ASVS V13.2.2 — see docs/security/postgres-least-privilege.md).
+      - KANBAN_APP_DB_PASSWORD=${KANBAN_APP_DB_PASSWORD:?set KANBAN_APP_DB_PASSWORD in .env}
+      - LOGTO_DB_PASSWORD=${LOGTO_DB_PASSWORD:?set LOGTO_DB_PASSWORD in .env}
+    volumes:
+      - kanban-db-data:/var/lib/postgresql/data
+      # Runs once on a fresh volume (alphabetical): create the logto DB/role, then the
+      # kanban_app least-privilege role that owns the kanban database.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban -d kanban"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  logto:
+    # Central identity provider (bundled in standalone mode), fronted by Caddy. First start seeds
+    # the schema, then serves OIDC + Management API (3001) and the admin console (3002).
+    image: svhd/logto:latest
+    container_name: kanban-logto
+    profiles: ["standalone"]
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "npm run cli db seed -- --swe && npm start"]
+    environment:
+      - TRUST_PROXY_HEADER=1
+      - DB_URL=postgres://logto:${LOGTO_DB_PASSWORD:?set LOGTO_DB_PASSWORD in .env}@db:5432/logto
+      # Public URLs (through Caddy). Both the browser and the app reach Logto at these hostnames,
+      # so the OIDC issuer is identical and resolvable from both. See docs/deployment.md.
+      - ENDPOINT=${LOGTO_ENDPOINT:-http://auth.kanban.localhost:8080}
+      - ADMIN_ENDPOINT=${LOGTO_ADMIN_ENDPOINT:-http://admin.kanban.localhost:8080}
+    restart: unless-stopped
+
+  kanban:
+    build: .
+    image: kanban:latest
+    container_name: kanban
+    depends_on:
+      db:
+        # required:false so the app still starts in integrated mode (no bundled db/logto):
+        # there it connects to the shared Postgres via ConnectionStrings__Kanban instead.
+        condition: service_healthy
+        required: false
+    # No published port: Caddy fronts the app in standalone; a shared proxy fronts it when integrated.
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      # App connects as the least-privilege kanban_app role (not the bootstrap superuser).
+      - ConnectionStrings__Kanban=Host=db;Port=5432;Database=kanban;Username=kanban_app;Password=${KANBAN_APP_DB_PASSWORD:?set KANBAN_APP_DB_PASSWORD in .env}
+      # Logto wiring (names documented in .env.example; secrets never committed). Issuer + management
+      # endpoint are the Caddy-fronted hostname so the app's back-channel reaches Logto.
+      - LOGTO__ISSUER=${LOGTO__ISSUER:-http://auth.kanban.localhost:8080/oidc/}
+      - LOGTO__AUDIENCE=${LOGTO__AUDIENCE:-https://kanban.api}
+      - LOGTO__WEB__CLIENTID=${LOGTO__WEB__CLIENTID:-}
+      - LOGTO__WEB__CLIENTSECRET=${LOGTO__WEB__CLIENTSECRET:-}
+      - LOGTO__MANAGEMENT__ENDPOINT=${LOGTO__MANAGEMENT__ENDPOINT:-http://auth.kanban.localhost:8080}
+      - LOGTO__MANAGEMENT__CLIENTID=${LOGTO__MANAGEMENT__CLIENTID:-}
+      - LOGTO__MANAGEMENT__CLIENTSECRET=${LOGTO__MANAGEMENT__CLIENTSECRET:-}
+      - LOGTO__MANAGEMENT__RESOURCE=${LOGTO__MANAGEMENT__RESOURCE:-https://default.logto.app/api}
+    restart: unless-stopped
+
+  caddy:
+    # Single reverse proxy (the "one reverse proxy" the architecture calls for). Routes by host:
+    #   localhost:8080                 → kanban app
+    #   auth.kanban.localhost:8080     → Logto OIDC + Management API
+    #   admin.kanban.localhost:8080    → Logto admin console
+    # The aliases below make those hostnames resolve to Caddy from inside the Docker network, so
+    # the app's server-side OIDC calls use the same URL the browser does. Browsers resolve
+    # *.localhost → 127.0.0.1, and only port 8080 needs forwarding.
+    image: caddy:2-alpine
+    container_name: kanban-caddy
+    profiles: ["standalone"]
+    depends_on:
+      - kanban
+      - logto
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - kanban-caddy-data:/data
+      - kanban-caddy-config:/config
+    networks:
+      default:
+        aliases:
+          - auth.kanban.localhost
+          - admin.kanban.localhost
+    restart: unless-stopped
+
+volumes:
+  kanban-db-data:
+  kanban-caddy-data:
+  kanban-caddy-config:
