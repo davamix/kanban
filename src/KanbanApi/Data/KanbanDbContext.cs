@@ -49,6 +49,7 @@ public sealed class KanbanDbContext : DbContext, IDataProtectionKeyContext
             e.HasKey(p => p.Id);
             e.Property(p => p.Name).IsRequired().HasMaxLength(200);
             e.Property(p => p.Description).HasMaxLength(2000);
+            e.Property(p => p.Budget).HasPrecision(18, 2);
             e.Property(p => p.OwnerId).IsRequired().HasMaxLength(64);
             e.Property(p => p.CreatedBy).HasMaxLength(64);
             e.HasIndex(p => p.OwnerId);

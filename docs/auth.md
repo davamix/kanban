@@ -33,7 +33,10 @@ Identity for "owner" / "assignee" is the Logto `sub`, derived from the validated
 - **Users are mirrored locally.** A lightweight `users` table keyed by the Logto `sub`
   (`Id` = sub, `Email`, `DisplayName`) is upserted on first login and whenever a user is
   referenced as an assignee. Owner/assignee columns are FKs to it. Users are identified by
-  `iss`+`sub`, which Logto never reassigns.
+  `iss`+`sub`, which Logto never reassigns. It is also the **display-name source** for the app:
+  `GET /api/me` and assignee rendering read the mirror, not the raw session claims — so a thin
+  session (e.g. a username-only account with no `name` claim) still shows a real name. When the
+  claims are thin, login **backfills** `DisplayName`/`Email` from the Management directory.
 - **Assignee directory.** The assignee picker lists Logto users via the **Management API**
   (M2M client-credentials). v1 lists all users; a future Logto **Organization** will scope it.
 

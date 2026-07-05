@@ -69,6 +69,20 @@ async function apiProjects() {
   if (!res.ok) throw new Error("Failed to load projects");
   return res.json();
 }
+// The assignee directory (all Logto users). Empty when Logto's Management API isn't configured.
+async function apiUsers() {
+  const res = guardAuth(await fetch("/api/users"));
+  if (!res.ok) throw new Error("Failed to load users");
+  return res.json();
+}
+// Create a project; returns the raw Response so the caller can branch on 201 vs 400 (validation).
+async function apiCreateProject(payload) {
+  return guardAuth(await fetch("/api/projects/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...csrfHeaders() },
+    body: JSON.stringify(payload),
+  }));
+}
 
 // --- State ---------------------------------------------------------------
 const state = { me: null, projects: [], filter: "" };
@@ -130,6 +144,220 @@ function renderProjects() {
   grid.innerHTML = filtered.map(cardHtml).join("");
 }
 
+// --- Create-project modal ------------------------------------------------
+const createState = { users: [], selected: [], loaded: false };
+let lastFocused = null; // element to restore focus to when the modal closes
+
+// Visible, focusable elements inside a container (for the dialog focus trap).
+function focusablesIn(container) {
+  const sel = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  return [...container.querySelectorAll(sel)].filter((el) => el.offsetParent !== null);
+}
+
+function userLabel(u) {
+  return u.name || u.email || u.id;
+}
+// The signed-in user, shaped like a directory user, so they can seed the assignee list.
+function meAsUser() {
+  return { id: state.me.id, name: state.me.displayName || state.me.email, email: state.me.email };
+}
+
+function fieldError(name, message) {
+  const el = document.querySelector(`.field-error[data-error="${name}"]`);
+  if (el) el.textContent = message || "";
+  const input = document.querySelector(`#createForm [name="${name}"]`);
+  if (input) input.setAttribute("aria-invalid", message ? "true" : "false");
+}
+function clearErrors() {
+  document.querySelectorAll("#createForm .field-error").forEach((el) => (el.textContent = ""));
+  document.querySelectorAll("#createForm [aria-invalid]").forEach((el) => el.setAttribute("aria-invalid", "false"));
+}
+
+function populateAssigneeSelect() {
+  const select = document.getElementById("fAssignee");
+  const chosen = new Set(createState.selected.map((u) => u.id));
+  const available = createState.users.filter((u) => !chosen.has(u.id));
+  select.innerHTML = `<option value="">Add assignee…</option>`;
+  for (const u of available) {
+    const opt = document.createElement("option");
+    opt.value = u.id;
+    opt.textContent = userLabel(u);
+    select.appendChild(opt);
+  }
+  select.disabled = available.length === 0;
+  document.getElementById("assigneeHint").classList.toggle("hidden", available.length !== 0);
+}
+
+function renderChips() {
+  const wrap = document.getElementById("assigneeChips");
+  wrap.innerHTML = "";
+  for (const u of createState.selected) {
+    const isMe = u.id === state.me?.id;
+    const chip = document.createElement("span");
+    chip.className = isMe ? "chip owner" : "chip";
+    const label = document.createElement("span");
+    // The creator is always an assignee (owner), so their chip is fixed and not removable.
+    label.textContent = isMe ? `${userLabel(u)} (You)` : userLabel(u);
+    chip.appendChild(label);
+    if (!isMe) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove ${userLabel(u)}`);
+      remove.innerHTML = `<span class="material-symbols-outlined">close</span>`;
+      remove.addEventListener("click", () => {
+        createState.selected = createState.selected.filter((s) => s.id !== u.id);
+        renderChips();
+        populateAssigneeSelect();
+      });
+      chip.appendChild(remove);
+    }
+    wrap.appendChild(chip);
+  }
+}
+
+async function ensureUsersLoaded() {
+  if (createState.loaded) return;
+  try {
+    createState.users = await apiUsers();
+  } catch {
+    createState.users = [];
+  }
+  createState.loaded = true;
+
+  // /api/me only carries the session claims, which may lack a name/username — so the seeded owner
+  // chip can fall back to the raw id. The directory has the Logto username; prefer it when present.
+  const dir = state.me && createState.users.find((u) => u.id === state.me.id);
+  const me = state.me && createState.selected.find((s) => s.id === state.me.id);
+  if (dir && me) {
+    me.name = dir.name || me.name;
+    me.email = dir.email || me.email;
+    renderChips();
+  }
+
+  populateAssigneeSelect();
+}
+
+function resetCreateForm() {
+  document.getElementById("createForm").reset();
+  // Seed the current user as a fixed assignee — the creator is always an assignee (owner).
+  createState.selected = state.me ? [meAsUser()] : [];
+  clearErrors();
+  renderChips();
+  populateAssigneeSelect();
+}
+
+function openCreateModal() {
+  lastFocused = document.activeElement;
+  resetCreateForm();
+  document.getElementById("createModal").classList.remove("hidden");
+  ensureUsersLoaded();
+  document.getElementById("fName").focus();
+}
+function closeCreateModal() {
+  document.getElementById("createModal").classList.add("hidden");
+  // Return focus to whatever opened the dialog (usually the "Create New" button).
+  if (lastFocused && typeof lastFocused.focus === "function") lastFocused.focus();
+}
+
+async function submitCreate(e) {
+  e.preventDefault();
+  clearErrors();
+
+  const name = document.getElementById("fName").value.trim();
+  const description = document.getElementById("fDescription").value.trim();
+  const budgetRaw = document.getElementById("fBudget").value;
+  const startDate = document.getElementById("fStart").value;
+  const endDate = document.getElementById("fEnd").value;
+
+  // Client-side checks mirror the server so users get inline feedback before the round-trip.
+  let ok = true;
+  if (!name) { fieldError("name", "Project name is required."); ok = false; }
+  if (!startDate) { fieldError("startDate", "Start date is required."); ok = false; }
+  if (!endDate) { fieldError("endDate", "End date is required."); ok = false; }
+  else if (startDate && endDate < startDate) { fieldError("endDate", "End date must be on or after the start date."); ok = false; }
+  if (budgetRaw !== "" && Number(budgetRaw) < 0) { fieldError("budget", "Budget cannot be negative."); ok = false; }
+  if (!ok) return;
+
+  const payload = {
+    name,
+    description: description || null,
+    startDate,
+    endDate,
+    budget: budgetRaw === "" ? null : Number(budgetRaw),
+    assigneeIds: createState.selected.map((u) => u.id),
+  };
+
+  const submit = document.getElementById("createSubmit");
+  submit.disabled = true;
+  try {
+    const res = await apiCreateProject(payload);
+    if (res.status === 201) {
+      const project = await res.json();
+      state.projects.unshift(project);
+      renderStats(state.projects);
+      renderProjects();
+      closeCreateModal();
+      showToast("Project created.");
+      return;
+    }
+    if (res.status === 400) {
+      const problem = await res.json().catch(() => null);
+      const errors = problem?.errors;
+      if (errors) {
+        // RFC 9457 problem-details: { errors: { field: [msg, …] } }. Keys are camelCase field names.
+        for (const [key, msgs] of Object.entries(errors))
+          fieldError(key.charAt(0).toLowerCase() + key.slice(1), Array.isArray(msgs) ? msgs[0] : String(msgs));
+      } else {
+        showToast(problem?.title || "Could not create project.", true);
+      }
+      return;
+    }
+    showToast("Could not create project.", true);
+  } catch (err) {
+    console.error(err);
+    showToast("Could not create project.", true);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+function wireCreateModal() {
+  const modal = document.getElementById("createModal");
+  document.getElementById("createNew").addEventListener("click", openCreateModal);
+  document.getElementById("createClose").addEventListener("click", closeCreateModal);
+  document.getElementById("createCancel").addEventListener("click", closeCreateModal);
+
+  // Dismiss on backdrop click and Escape.
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeCreateModal(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) closeCreateModal();
+  });
+
+  // Focus trap: keep Tab within the dialog while it's open (ARIA dialog requirement).
+  modal.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const f = focusablesIn(modal);
+    if (f.length === 0) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+
+  // Selecting from the dropdown moves that user into a chip.
+  document.getElementById("fAssignee").addEventListener("change", (e) => {
+    const id = e.target.value;
+    if (!id) return;
+    const user = createState.users.find((u) => u.id === id);
+    if (user && !createState.selected.some((s) => s.id === id)) {
+      createState.selected.push(user);
+      renderChips();
+    }
+    populateAssigneeSelect();
+  });
+
+  document.getElementById("createForm").addEventListener("submit", submitCreate);
+}
+
 // --- Wiring --------------------------------------------------------------
 function wireStaticHandlers() {
   // Fill every antiforgery field from the readable XSRF-TOKEN cookie so the logout POSTs validate.
@@ -162,6 +390,7 @@ function wireStaticHandlers() {
 // --- Init ----------------------------------------------------------------
 async function init() {
   wireStaticHandlers();
+  wireCreateModal();
   try {
     state.me = await apiMe();
     if (!state.me) { window.location.assign("/login"); return; }

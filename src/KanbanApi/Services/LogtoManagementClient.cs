@@ -19,7 +19,8 @@ public interface ILogtoManagementClient
 /// 403 (a documented Logto gotcha; see docs/auth.md). Returns an empty list when not configured,
 /// so the app runs before the M2M app is provisioned.
 /// </summary>
-public sealed class LogtoManagementClient(HttpClient http, IConfiguration config) : ILogtoManagementClient
+public sealed class LogtoManagementClient(
+    HttpClient http, IConfiguration config, ILogger<LogtoManagementClient> logger) : ILogtoManagementClient
 {
     private string? _token;
     private DateTimeOffset _tokenExpiry;
@@ -39,14 +40,27 @@ public sealed class LogtoManagementClient(HttpClient http, IConfiguration config
         if (!string.IsNullOrWhiteSpace(search))
             url += $"?q={Uri.EscapeDataString(search.Trim())}";
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        using var res = await http.SendAsync(req, ct);
-        if (!res.IsSuccessStatusCode)
-            return [];
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            using var res = await http.SendAsync(req, ct);
+            if (!res.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Logto directory returned {Status} for {Url}; treating as empty.", (int)res.StatusCode, url);
+                return [];
+            }
 
-        var users = await res.Content.ReadFromJsonAsync<List<LogtoUser>>(cancellationToken: ct) ?? [];
-        return users.Select(u => new DirectoryUser(u.Id, u.Name ?? u.Username, u.PrimaryEmail)).ToList();
+            var users = await res.Content.ReadFromJsonAsync<List<LogtoUser>>(cancellationToken: ct) ?? [];
+            return users.Select(u => new DirectoryUser(u.Id, u.Name ?? u.Username, u.PrimaryEmail)).ToList();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            // The directory being unreachable/misconfigured must not take down the assignee picker or
+            // project creation — degrade to an empty directory (owner-only assignment) instead of 500.
+            logger.LogWarning(ex, "Logto directory unreachable at {Url}; treating as empty. Check Logto:Management:Endpoint.", url);
+            return [];
+        }
     }
 
     private async Task<string?> GetTokenAsync(CancellationToken ct)
@@ -75,17 +89,28 @@ public sealed class LogtoManagementClient(HttpClient http, IConfiguration config
         var basic = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Basic", basic);
 
-        using var res = await http.SendAsync(req, ct);
-        if (!res.IsSuccessStatusCode)
-            return null;
+        try
+        {
+            using var res = await http.SendAsync(req, ct);
+            if (!res.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Logto token request returned {Status}; assignee directory unavailable.", (int)res.StatusCode);
+                return null;
+            }
 
-        var payload = await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct);
-        if (payload?.AccessToken is null)
-            return null;
+            var payload = await res.Content.ReadFromJsonAsync<TokenResponse>(cancellationToken: ct);
+            if (payload?.AccessToken is null)
+                return null;
 
-        _token = payload.AccessToken;
-        _tokenExpiry = DateTimeOffset.UtcNow.AddSeconds(Math.Max(30, payload.ExpiresIn - 30));
-        return _token;
+            _token = payload.AccessToken;
+            _tokenExpiry = DateTimeOffset.UtcNow.AddSeconds(Math.Max(30, payload.ExpiresIn - 30));
+            return _token;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Logto token endpoint unreachable; assignee directory unavailable. Check Logto:Issuer.");
+            return null;
+        }
     }
 
     private sealed record TokenResponse(
