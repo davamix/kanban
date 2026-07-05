@@ -35,6 +35,13 @@ flat/square shape, neutral scale, Material-3 token naming, Inter) is shared.
   footer with an **avatar stack** (initials) + the date range. The whole card is the click target
   (keyboard-focusable). Adapts the mockup's task-count/efficiency bits — which have no domain data
   yet — down to what a project actually carries.
+- **Create-project modal:** a centred dialog over a scrim (the Stitch *Project Creation Form*),
+  opened by "Create New". Three token-styled `form-section`s (General Information · Stakeholders ·
+  Resources & Timeline), each a `section-head` (primary icon + uppercase label) over its fields.
+  The **assignee picker** is a `select` that moves each pick into a removable `chip`; "Client /
+  Organization" is a disabled placeholder (no domain field yet). Dismisses on Cancel, ✕, backdrop,
+  or Escape. Submits via `POST /api/projects` with the `X-CSRF-TOKEN` header; field errors render
+  inline from the RFC 9457 `errors`.
 - **Logout** is a real antiforgery-protected POST form + button, never a link.
 
 ## Accessibility

@@ -1,7 +1,9 @@
+using KanbanApi.Data;
 using KanbanApi.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.EntityFrameworkCore;
 
 namespace KanbanApi.Endpoints;
 
@@ -41,9 +43,21 @@ public static class AuthEndpoints
             return Results.SignOut(new AuthenticationProperties { RedirectUri = "/" }, schemes);
         });
 
-        // Who am I — drives the SPA header + the auto-assigned creator.
-        app.MapGet("/api/me", (ICurrentUser me) =>
-            Results.Ok(new { id = me.Id, email = me.Email, displayName = me.DisplayName }))
-            .RequireAuthorization();
+        // Who am I — drives the SPA header + the auto-assigned creator. Prefer the local user mirror
+        // (kept in sync from Logto at login), which carries a resolved name/email even when the
+        // session claims are thin (e.g. a username-only account with no `name` claim); fall back to
+        // the claims. Read-only: the mirror is populated/enriched at login, not here.
+        app.MapGet("/api/me", async (ICurrentUser me, KanbanDbContext db, CancellationToken ct) =>
+        {
+            var user = me.Id is { } id
+                ? await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id, ct)
+                : null;
+            return Results.Ok(new
+            {
+                id = me.Id,
+                email = user?.Email ?? me.Email,
+                displayName = user?.DisplayName ?? me.DisplayName,
+            });
+        }).RequireAuthorization();
     }
 }

@@ -31,7 +31,7 @@ Integration tests need a Docker daemon (the devcontainer has docker-in-docker).
 
 | Fixture | What it gives you |
 |---|---|
-| [`ApiFactory`](../tests/KanbanApi.IntegrationTests/Fixtures/ApiFactory.cs) | Real Postgres + `TestAuthHandler` (auth via the `X-Test-User` header), CSRF + Logto faked, env `Testing` (per-user seeding off). Default for endpoint/authz tests. |
+| [`ApiFactory`](../tests/KanbanApi.IntegrationTests/Fixtures/ApiFactory.cs) | Real Postgres + `TestAuthHandler` (auth via the `X-Test-User` header), CSRF + Logto faked, env `Testing`. Default for endpoint/authz tests. |
 | `JwtApiFactory` _(planned)_ | Real `JwtBearer` validated against a local test key; `MintJwt(aud, sub)`. For audience/issuer tests. |
 
 - **`CreateClientAs("user-a")`** authenticates as that user (its value is the `sub`). No header → `401`.

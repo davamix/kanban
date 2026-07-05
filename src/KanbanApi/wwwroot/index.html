@@ -58,7 +58,7 @@
           </div>
           <div class="page-actions">
             <button class="btn outline" type="button" data-soon="Filtering">Filter</button>
-            <button id="createNew" class="btn primary" type="button" data-soon="Project creation">Create New</button>
+            <button id="createNew" class="btn primary" type="button">Create New</button>
           </div>
         </div>
 
@@ -102,6 +102,102 @@
     <button class="bottom-link" type="button" data-soon="Projects"><span class="material-symbols-outlined">folder_shared</span><span>Projects</span></button>
     <button class="bottom-link" type="button" data-soon="Tasks"><span class="material-symbols-outlined">assignment</span><span>Tasks</span></button>
   </nav>
+
+  <!-- Create-project modal (Stitch "Project Creation Form"). Hidden until "Create New". -->
+  <div id="createModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="createTitle">
+    <div class="modal" role="document">
+      <header class="modal-head">
+        <div>
+          <h2 id="createTitle" class="modal-title">New Project</h2>
+          <p class="modal-subtitle">Initialize a new workflow</p>
+        </div>
+        <button type="button" class="icon-btn" id="createClose" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+      </header>
+
+      <form id="createForm" class="modal-form" novalidate>
+        <!-- General Information -->
+        <section class="form-section">
+          <div class="section-head">
+            <span class="material-symbols-outlined">assignment</span>
+            <h3>General Information</h3>
+          </div>
+          <div class="field">
+            <label for="fName">Project Name <span class="req">*</span></label>
+            <input id="fName" name="name" type="text" maxlength="200" autocomplete="off" required aria-required="true"
+                   aria-describedby="err-name" placeholder="e.g., Q4 Infrastructure Overhaul" />
+            <p id="err-name" class="field-error" data-error="name"></p>
+          </div>
+          <div class="field">
+            <label for="fDescription">Description</label>
+            <textarea id="fDescription" name="description" rows="4" maxlength="2000" aria-describedby="err-description"
+                      placeholder="Briefly describe the project scope and objectives…"></textarea>
+            <p id="err-description" class="field-error" data-error="description"></p>
+          </div>
+        </section>
+
+        <!-- Stakeholders -->
+        <section class="form-section">
+          <div class="section-head">
+            <span class="material-symbols-outlined">group</span>
+            <h3>Stakeholders</h3>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="fAssignee">Assignees</label>
+              <div class="select-wrap">
+                <select id="fAssignee">
+                  <option value="">Add assignee…</option>
+                </select>
+                <span class="material-symbols-outlined select-caret">expand_more</span>
+              </div>
+              <div id="assigneeChips" class="chips" aria-live="polite"></div>
+              <p id="assigneeHint" class="field-hint hidden">No other users available to assign.</p>
+            </div>
+            <!-- Client / Organization: control only, no domain field yet (intentionally inert). -->
+            <div class="field">
+              <label for="fClient">Client / Organization</label>
+              <div class="select-wrap">
+                <select id="fClient" disabled title="Coming soon">
+                  <option value="">Select organization</option>
+                </select>
+                <span class="material-symbols-outlined select-caret">expand_more</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Resources & Timeline -->
+        <section class="form-section">
+          <div class="section-head">
+            <span class="material-symbols-outlined">payments</span>
+            <h3>Resources &amp; Timeline</h3>
+          </div>
+          <div class="field-row three">
+            <div class="field">
+              <label for="fBudget">Budget</label>
+              <input id="fBudget" name="budget" type="number" min="0" step="0.01" aria-describedby="err-budget" placeholder="0.00" />
+              <p id="err-budget" class="field-error" data-error="budget"></p>
+            </div>
+            <div class="field">
+              <label for="fStart">Start Date <span class="req">*</span></label>
+              <input id="fStart" name="startDate" type="date" required aria-required="true" aria-describedby="err-startDate" />
+              <p id="err-startDate" class="field-error" data-error="startDate"></p>
+            </div>
+            <div class="field">
+              <label for="fEnd">End Date <span class="req">*</span></label>
+              <input id="fEnd" name="endDate" type="date" required aria-required="true" aria-describedby="err-endDate" />
+              <p id="err-endDate" class="field-error" data-error="endDate"></p>
+            </div>
+          </div>
+        </section>
+
+        <footer class="modal-foot">
+          <button type="button" class="btn outline" id="createCancel">Cancel</button>
+          <button type="submit" class="btn primary" id="createSubmit">Create Project</button>
+        </footer>
+      </form>
+    </div>
+  </div>
 
   <div id="toast" class="toast hidden" role="status"></div>
 

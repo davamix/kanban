@@ -14,7 +14,22 @@ public sealed record ProjectResponse(
     string? Description,
     DateOnly StartDate,
     DateOnly EndDate,
+    decimal? Budget,
     string OwnerId,
     bool IsOwner,
     string Role,
     IReadOnlyList<AssigneeSummary> Assignees);
+
+/// <summary>
+/// Create-project payload from the creation form. The owner is taken from the authenticated
+/// session server-side (never the request); <see cref="AssigneeIds"/> are Logto <c>sub</c>s picked
+/// from the assignee directory (the owner is always added as an assignee). "Client / Organization"
+/// on the form is a placeholder with no domain field yet, so it is intentionally absent here.
+/// </summary>
+public sealed record CreateProjectRequest(
+    string Name,
+    string? Description,
+    DateOnly? StartDate,
+    DateOnly? EndDate,
+    decimal? Budget,
+    IReadOnlyList<string>? AssigneeIds);

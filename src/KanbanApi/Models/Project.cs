@@ -15,6 +15,12 @@ public sealed class Project
     public DateOnly EndDate { get; set; }
 
     /// <summary>
+    /// Optional planned budget for the project. Currency-neutral — a bare amount, with no currency
+    /// stored or assumed (the UI shows no currency symbol). Never negative.
+    /// </summary>
+    public decimal? Budget { get; set; }
+
+    /// <summary>
     /// The Logto <c>sub</c> of the owner (creator). Owner-only: edit, delete, manage assignees.
     /// Set server-side from the authenticated user — never from a request payload.
     /// </summary>

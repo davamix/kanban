@@ -16,4 +16,12 @@ public interface IProjectStore
     /// the caller has no visible projects (or no current user — fail closed).
     /// </summary>
     Task<IReadOnlyList<ProjectResponse>> ListVisibleAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Creates a project owned by the current user, who is always added as an assignee. Requested
+    /// assignees are validated against the Logto directory (unknown ids are dropped) and mirrored
+    /// into the local users table so the FK holds and cards can show names. Returns the created
+    /// project as it should appear on the selection screen (the caller is the owner).
+    /// </summary>
+    Task<ProjectResponse> CreateAsync(CreateProjectRequest request, CancellationToken ct = default);
 }

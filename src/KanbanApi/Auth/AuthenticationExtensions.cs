@@ -30,8 +30,19 @@ public static class AuthenticationExtensions
         var email = ctx.Principal!.FindFirst("email")?.Value;
         var name = ctx.Principal.FindFirst("name")?.Value ?? ctx.Principal.FindFirst("username")?.Value;
 
+        // Session claims can be thin (a username-only account may carry no name/email claim), which
+        // would leave the mirror — and everything that reads it (header, assignee chips) — showing a
+        // raw id. Backfill from the Logto directory so the mirror is complete. The directory client
+        // fails soft (empty on any error), so a fresh login never breaks if Logto is unavailable.
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(email))
+        {
+            var directory = ctx.HttpContext.RequestServices.GetRequiredService<ILogtoManagementClient>();
+            var dir = (await directory.GetUsersAsync(null)).FirstOrDefault(u => u.Id == sub);
+            name = string.IsNullOrWhiteSpace(name) ? dir?.Name : name;
+            email = string.IsNullOrWhiteSpace(email) ? dir?.Email : email;
+        }
+
         var user = await db.Users.FindAsync(sub);
-        var isNewUser = user is null;
         if (user is null)
             db.Users.Add(new AppUser { Id = sub, Email = email, DisplayName = name });
         else
@@ -40,12 +51,6 @@ public static class AuthenticationExtensions
             user.DisplayName = name ?? user.DisplayName;
         }
         await db.SaveChangesAsync();
-
-        // Development only: give a first-time user an illustrative, populated board (the
-        // owner/assignee filter is per-user, so this has to be seeded for *this* user). Idempotent.
-        var env = ctx.HttpContext.RequestServices.GetRequiredService<IHostEnvironment>();
-        if (isNewUser && env.IsDevelopment())
-            await SampleData.SeedForUserAsync(db, sub, name);
     }
 
     public static void AddKanbanAuth(this WebApplicationBuilder builder)
