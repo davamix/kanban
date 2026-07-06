@@ -100,4 +100,23 @@ public sealed class EfProjectStore(
             project.Id, project.Name, project.Description, project.StartDate, project.EndDate,
             project.Budget, me, IsOwner: true, Role: "owner", assignees);
     }
+
+    public async Task<ProjectDeleteOutcome> DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var me = currentUser.Id;
+
+        // The global query filter scopes this to projects the caller can see (owner or assignee),
+        // so an id they have no access to is simply "not found" — no existence leak (ASVS V8).
+        var project = await db.Projects.FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (project is null)
+            return ProjectDeleteOutcome.NotFound;
+
+        // Delete is owner-only: an assignee can read the project but must not remove it.
+        if (project.OwnerId != me)
+            return ProjectDeleteOutcome.Forbidden;
+
+        db.Projects.Remove(project);   // project_assignees rows cascade (FK OnDelete: Cascade).
+        await db.SaveChangesAsync(ct);
+        return ProjectDeleteOutcome.Deleted;
+    }
 }

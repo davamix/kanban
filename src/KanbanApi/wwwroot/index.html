@@ -37,18 +37,8 @@
   </header>
 
   <div class="app-body">
-    <!-- Side navigation (nav only) -->
-    <aside class="sidebar" aria-label="Primary">
-      <nav class="side-nav">
-        <a class="side-link active" href="#" aria-current="page"><span class="material-symbols-outlined">dashboard</span><span>Dashboard</span></a>
-        <a class="side-link" href="#" data-soon="Projects"><span class="material-symbols-outlined">folder_shared</span><span>Projects</span></a>
-        <a class="side-link" href="#" data-soon="Tasks"><span class="material-symbols-outlined">assignment</span><span>Tasks</span></a>
-        <a class="side-link" href="#" data-soon="Team"><span class="material-symbols-outlined">group</span><span>Team</span></a>
-        <a class="side-link" href="#" data-soon="Reports"><span class="material-symbols-outlined">analytics</span><span>Reports</span></a>
-      </nav>
-    </aside>
-
-    <!-- Main content -->
+    <!-- Main content (left navigation removed per "Drag to Delete Refinement" — a project card is
+         dragged onto the delete drop zone below to remove it). -->
     <main class="main">
       <div class="page">
         <div class="page-head">
@@ -94,6 +84,14 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Drag-to-delete zone (desktop). Greyed/dormant until a project card drag begins, then it
+       switches to the live "delete" (error) colour and accepts the drop. Dropping a card opens
+       the name-verification confirm dialog below. -->
+  <div id="deleteZone" class="delete-zone" aria-hidden="true">
+    <span class="material-symbols-outlined">delete_forever</span>
+    <p>Drop here to delete project</p>
   </div>
 
   <!-- Mobile bottom navigation -->
@@ -194,6 +192,36 @@
         <footer class="modal-foot">
           <button type="button" class="btn outline" id="createCancel">Cancel</button>
           <button type="submit" class="btn primary" id="createSubmit">Create Project</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete-confirm modal (Stitch "Project Deletion - Name Verification Modal"). Hidden until a
+       card is dropped on the delete zone. The user must type the project name exactly; the Delete
+       button stays disabled until it matches. -->
+  <div id="deleteModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="deleteTitle" aria-describedby="deleteDesc">
+    <div class="modal modal-sm" role="document">
+      <header class="modal-head">
+        <div>
+          <h2 id="deleteTitle" class="modal-title">Delete project?</h2>
+          <p class="modal-subtitle">This action is permanent and cannot be undone.</p>
+        </div>
+        <button type="button" class="icon-btn" id="deleteClose" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+      </header>
+
+      <form id="deleteForm" class="modal-form" novalidate>
+        <p id="deleteDesc" class="delete-desc">
+          You are about to delete <strong id="deleteProjectName"></strong> and all of its tasks.
+        </p>
+        <div class="field">
+          <label for="fConfirmName">Type the project name to confirm</label>
+          <input id="fConfirmName" name="confirmName" type="text" autocomplete="off"
+                 autocapitalize="off" spellcheck="false" aria-describedby="deleteDesc" />
+        </div>
+        <footer class="modal-foot">
+          <button type="button" class="btn outline" id="deleteCancel">Cancel</button>
+          <button type="submit" class="btn danger" id="deleteSubmit" disabled>Delete Project</button>
         </footer>
       </form>
     </div>
