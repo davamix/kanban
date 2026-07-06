@@ -87,12 +87,16 @@
   </div>
 
   <!-- Drag-to-delete zone (desktop). Greyed/dormant until a project card drag begins, then it
-       switches to the live "delete" (error) colour and accepts the drop. Dropping a card opens
-       the name-verification confirm dialog below. -->
-  <div id="deleteZone" class="delete-zone" role="region" aria-label="Project deletion drop zone">
+       switches to the live "delete" (error) colour, names the dragged project, and accepts the drop.
+       Dropping a card opens the name-verification confirm dialog below. It's a pointer-only visual
+       affordance (the keyboard/AT path is each card's Delete shortcut + button), so it is
+       deliberately not a landmark — the drag progress is announced via #dragStatus instead. -->
+  <div id="deleteZone" class="delete-zone">
     <span class="material-symbols-outlined" aria-hidden="true">delete_forever</span>
-    <p>Drop here to delete project</p>
+    <p id="deleteZoneLabel">Drop here to delete project</p>
   </div>
+  <!-- Polite live region: announces drag pick-up / over-zone progress to screen readers. -->
+  <div id="dragStatus" class="sr-only" role="status"></div>
 
   <!-- Mobile bottom navigation -->
   <nav class="bottom-nav" aria-label="Primary (mobile)">

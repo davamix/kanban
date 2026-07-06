@@ -458,32 +458,51 @@ function wireDeleteModal() {
 
 // Native HTML5 drag-and-drop: dragging an (owner) card arms the delete zone; dropping opens the
 // confirm dialog. The zone is greyed and pointer-events:none until armed (so it never blocks clicks).
+const DELETE_ZONE_LABEL = "Drop here to delete project";
+
 function wireDragToDelete() {
   const grid = document.getElementById("projectGrid");
   const zone = document.getElementById("deleteZone");
+  const label = document.getElementById("deleteZoneLabel");
+  const status = document.getElementById("dragStatus");
   let dragId = null;
+  let dragName = null;
+
+  // Announce drag progress to screen readers via the polite live region.
+  const announce = (msg) => { if (status) status.textContent = msg; };
+  // Reset the zone to its dormant label + clear the announcement.
+  const resetZone = () => { label.textContent = DELETE_ZONE_LABEL; announce(""); };
 
   grid.addEventListener("dragstart", (e) => {
     const card = e.target.closest(".project-card");
     if (!card || card.getAttribute("draggable") !== "true") return;
     dragId = card.dataset.id;
+    dragName = state.projects.find((p) => p.id === dragId)?.name ?? "this project";
     e.dataTransfer.setData("text/plain", dragId);
     e.dataTransfer.effectAllowed = "move";
     card.classList.add("dragging");
     zone.classList.add("armed");   // grey → live delete colour
+    // The zone now names what's being dragged (visual + spoken feedback).
+    label.textContent = `Release “${dragName}” here to delete`;
+    announce(`“${dragName}” grabbed. Drop it on the delete zone to remove it.`);
   });
   grid.addEventListener("dragend", (e) => {
     const card = e.target.closest(".project-card");
     if (card) card.classList.remove("dragging");
     zone.classList.remove("armed", "over");
+    resetZone();
     dragId = null;
+    dragName = null;
   });
 
   zone.addEventListener("dragover", (e) => {
     if (dragId === null) return;
     e.preventDefault();                     // required to allow a drop
     e.dataTransfer.dropEffect = "move";
-    zone.classList.add("over");
+    if (!zone.classList.contains("over")) {   // announce only on entry, not every tick
+      zone.classList.add("over");
+      announce(`Over delete zone. Release to delete “${dragName}”.`);
+    }
   });
   zone.addEventListener("dragleave", (e) => {
     if (!zone.contains(e.relatedTarget)) zone.classList.remove("over");
@@ -492,6 +511,7 @@ function wireDragToDelete() {
     e.preventDefault();
     const id = e.dataTransfer.getData("text/plain") || dragId;
     zone.classList.remove("armed", "over");
+    // The confirm dialog (and, on success, the toast) carries feedback from here on.
     if (id) openDeleteModal(id);
   });
 }

@@ -65,15 +65,17 @@ holding open since ADR 0003.
   **Resolved (2026-07-06, follow-up).** The initial implementation reached delete only via native
   HTML5 drag-and-drop, leaving keyboard and screen-reader users with no path to it. The Stitch screen
   *"Project Selection - Accessible Drag-and-Drop Refinement"* adds an **accessible delete affordance**:
-  each owner card is now a labelled `role="article"` (spoken `aria-label`: name · ownership · dates)
-  with two keyboard/AT paths to the same name-verification confirm modal, and the drop zone is a
-  labelled `role="region"`:
+  each owner card is now `<article>` with a spoken `aria-label` (name · ownership · dates) and two
+  keyboard/AT paths to the same name-verification confirm modal:
   - **Press `Delete` (or `Backspace`) while a card is focused** — the primary keyboard path,
     advertised to screen readers via `aria-keyshortcuts="Delete"`. `Enter` is deliberately reserved
     for **opening the project** (a later screen), so it is not bound to delete.
   - **A per-card Delete button that is screen-reader-only until focused**, then revealed at the card's
     top-right — the click / screen-reader affordance (activated with Enter/Space *on the button*).
 
-  Drag-and-drop remains the pointer path; all three share one confirm modal.
+  Drag-and-drop remains the pointer path; all three share one confirm modal. The drop zone is a
+  **pointer-only visual affordance**, so it is deliberately **not** an ARIA landmark (no
+  `role="region"`): while a card is dragged it names the target (*"Release "X" here to delete"*) and
+  a polite `role="status"` live region announces pick-up / over-zone progress to screen readers.
 - Still deferred: project **edit** + assignee management, Calendar mirroring on delete, and the
   **board** screen.
