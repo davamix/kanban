@@ -24,4 +24,23 @@ public interface IProjectStore
     /// project as it should appear on the selection screen (the caller is the owner).
     /// </summary>
     Task<ProjectResponse> CreateAsync(CreateProjectRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes a project. Delete is owner-only: the global query filter first scopes lookup to
+    /// projects the caller can see (owner or assignee), then the owner check gates the removal so an
+    /// assignee cannot delete a project they merely share. Assignees cascade with the project.
+    /// Returns the outcome so the endpoint can map it to 204 / 403 / 404 without leaking existence.
+    /// </summary>
+    Task<ProjectDeleteOutcome> DeleteAsync(Guid id, CancellationToken ct = default);
+}
+
+/// <summary>Result of a delete attempt, mapped to an HTTP status at the endpoint.</summary>
+public enum ProjectDeleteOutcome
+{
+    /// <summary>The project was deleted.</summary>
+    Deleted,
+    /// <summary>The caller can see the project but is not its owner — refuse (403).</summary>
+    Forbidden,
+    /// <summary>No visible project with that id (absent, or not owned/assigned) — treat as 404.</summary>
+    NotFound,
 }

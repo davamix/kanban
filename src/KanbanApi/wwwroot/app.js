@@ -83,6 +83,13 @@ async function apiCreateProject(payload) {
     body: JSON.stringify(payload),
   }));
 }
+// Delete a project; returns the raw Response so the caller can branch on 204 / 403 / 404.
+async function apiDeleteProject(id) {
+  return guardAuth(await fetch(`/api/projects/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { ...csrfHeaders() },
+  }));
+}
 
 // --- State ---------------------------------------------------------------
 const state = { me: null, projects: [], filter: "" };
@@ -112,8 +119,9 @@ function cardHtml(p) {
   const badge = p.isOwner
     ? `<span class="badge owner">Owner</span>`
     : `<span class="badge shared">Shared</span>`;
+  // Only the owner can delete a project, so only owner cards are draggable onto the delete zone.
   return `
-    <article class="project-card" tabindex="0" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name.toLowerCase())}">
+    <article class="project-card" tabindex="0" draggable="${p.isOwner ? "true" : "false"}" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name.toLowerCase())}">
       <div class="card-top">
         <div class="card-id">
           <span class="card-icon material-symbols-outlined" style="font-variation-settings:'FILL' 1;">${iconFor(p.id)}</span>
@@ -152,6 +160,23 @@ let lastFocused = null; // element to restore focus to when the modal closes
 function focusablesIn(container) {
   const sel = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
   return [...container.querySelectorAll(sel)].filter((el) => el.offsetParent !== null);
+}
+
+// Shared dialog chrome for every modal: backdrop-click + Escape dismiss and a Tab focus trap (ARIA
+// dialog requirement). Kept in one place so new dialogs reuse it instead of re-copying the plumbing.
+function wireModalChrome(modal, close) {
+  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !modal.classList.contains("hidden")) close();
+  });
+  modal.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const f = focusablesIn(modal);
+    if (f.length === 0) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 }
 
 function userLabel(u) {
@@ -326,22 +351,7 @@ function wireCreateModal() {
   document.getElementById("createNew").addEventListener("click", openCreateModal);
   document.getElementById("createClose").addEventListener("click", closeCreateModal);
   document.getElementById("createCancel").addEventListener("click", closeCreateModal);
-
-  // Dismiss on backdrop click and Escape.
-  modal.addEventListener("click", (e) => { if (e.target === modal) closeCreateModal(); });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !modal.classList.contains("hidden")) closeCreateModal();
-  });
-
-  // Focus trap: keep Tab within the dialog while it's open (ARIA dialog requirement).
-  modal.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab") return;
-    const f = focusablesIn(modal);
-    if (f.length === 0) return;
-    const first = f[0], last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-  });
+  wireModalChrome(modal, closeCreateModal);
 
   // Selecting from the dropdown moves that user into a chip.
   document.getElementById("fAssignee").addEventListener("change", (e) => {
@@ -356,6 +366,120 @@ function wireCreateModal() {
   });
 
   document.getElementById("createForm").addEventListener("submit", submitCreate);
+}
+
+// --- Drag-to-delete + confirm modal --------------------------------------
+const deleteState = { project: null };
+
+// Enable the Delete button only when the typed text exactly matches the project name.
+function updateDeleteButton() {
+  const input = document.getElementById("fConfirmName");
+  const btn = document.getElementById("deleteSubmit");
+  const match = !!deleteState.project && input.value.trim() === deleteState.project.name;
+  btn.disabled = !match;
+}
+
+function openDeleteModal(id) {
+  const project = state.projects.find((p) => p.id === id);
+  if (!project) return;
+  deleteState.project = project;
+  lastFocused = document.activeElement;
+
+  // Title/description are cosmetic (per the brief): name the project being deleted.
+  document.getElementById("deleteProjectName").textContent = project.name;
+  const input = document.getElementById("fConfirmName");
+  input.value = "";
+  input.setAttribute("placeholder", project.name);
+  updateDeleteButton();
+
+  document.getElementById("deleteModal").classList.remove("hidden");
+  input.focus();
+}
+function closeDeleteModal() {
+  document.getElementById("deleteModal").classList.add("hidden");
+  deleteState.project = null;
+  if (lastFocused && typeof lastFocused.focus === "function") lastFocused.focus();
+}
+
+async function submitDelete(e) {
+  e.preventDefault();
+  const project = deleteState.project;
+  // Guard against submit while the name doesn't match (e.g. Enter key).
+  if (!project || document.getElementById("fConfirmName").value.trim() !== project.name) return;
+
+  const btn = document.getElementById("deleteSubmit");
+  btn.disabled = true;
+  try {
+    const res = await apiDeleteProject(project.id);
+    if (res.status === 204 || res.status === 404) {
+      // 404 → already gone; drop it locally either way so the grid reflects reality.
+      state.projects = state.projects.filter((p) => p.id !== project.id);
+      renderStats(state.projects);
+      renderProjects();
+      closeDeleteModal();
+      showToast(res.status === 204 ? "Project deleted." : "Project no longer exists.");
+      return;
+    }
+    if (res.status === 403) {
+      showToast("Only the project owner can delete it.", true);
+    } else {
+      showToast("Could not delete project.", true);
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Could not delete project.", true);
+  } finally {
+    updateDeleteButton();
+  }
+}
+
+function wireDeleteModal() {
+  const modal = document.getElementById("deleteModal");
+  document.getElementById("deleteClose").addEventListener("click", closeDeleteModal);
+  document.getElementById("deleteCancel").addEventListener("click", closeDeleteModal);
+  document.getElementById("fConfirmName").addEventListener("input", updateDeleteButton);
+  document.getElementById("deleteForm").addEventListener("submit", submitDelete);
+  wireModalChrome(modal, closeDeleteModal);
+}
+
+// Native HTML5 drag-and-drop: dragging an (owner) card arms the delete zone; dropping opens the
+// confirm dialog. The zone is greyed and pointer-events:none until armed (so it never blocks clicks).
+function wireDragToDelete() {
+  const grid = document.getElementById("projectGrid");
+  const zone = document.getElementById("deleteZone");
+  let dragId = null;
+
+  grid.addEventListener("dragstart", (e) => {
+    const card = e.target.closest(".project-card");
+    if (!card || card.getAttribute("draggable") !== "true") return;
+    dragId = card.dataset.id;
+    e.dataTransfer.setData("text/plain", dragId);
+    e.dataTransfer.effectAllowed = "move";
+    card.classList.add("dragging");
+    zone.classList.add("armed");   // grey → live delete colour
+  });
+  grid.addEventListener("dragend", (e) => {
+    const card = e.target.closest(".project-card");
+    if (card) card.classList.remove("dragging");
+    zone.classList.remove("armed", "over");
+    dragId = null;
+  });
+
+  zone.addEventListener("dragover", (e) => {
+    if (dragId === null) return;
+    e.preventDefault();                     // required to allow a drop
+    e.dataTransfer.dropEffect = "move";
+    zone.classList.add("over");
+  });
+  zone.addEventListener("dragleave", (e) => {
+    if (!zone.contains(e.relatedTarget)) zone.classList.remove("over");
+  });
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain") || dragId;
+    zone.classList.remove("armed", "over");
+    if (id) openDeleteModal(id);
+  });
 }
 
 // --- Wiring --------------------------------------------------------------
@@ -391,6 +515,8 @@ function wireStaticHandlers() {
 async function init() {
   wireStaticHandlers();
   wireCreateModal();
+  wireDeleteModal();
+  wireDragToDelete();
   try {
     state.me = await apiMe();
     if (!state.me) { window.location.assign("/login"); return; }

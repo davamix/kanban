@@ -4,10 +4,11 @@ using KanbanApi.Services;
 namespace KanbanApi.Endpoints;
 
 /// <summary>
-/// The project REST surface: list the projects the signed-in user owns or is assigned to, and
-/// create a new project (the caller becomes the owner). Update/delete and assignee management
-/// arrive with later screens. The whole group requires authentication; per-user read isolation is
-/// enforced by the store's global query filter, and the owner is always taken from the session.
+/// The project REST surface: list the projects the signed-in user owns or is assigned to, create a
+/// new project (the caller becomes the owner), and delete a project (owner-only). Update and
+/// assignee management arrive with later screens. The whole group requires authentication; per-user
+/// read isolation is enforced by the store's global query filter, and the owner is always taken from
+/// the session — delete additionally re-checks ownership before removing.
 /// </summary>
 public static class ProjectEndpoints
 {
@@ -48,5 +49,26 @@ public static class ProjectEndpoints
             return Results.Created($"/api/projects/{created.Id}", created);
         })
             .WithSummary("Create a project owned by the current user");
+
+        // DELETE /api/projects/{id} — remove a project. Owner-only; the store scopes the lookup to
+        // visible projects (so a hidden id is a 404, not a 403 that would confirm existence) and
+        // gates the removal on ownership. Antiforgery is enforced for the cookie/BFF path upstream.
+        group.MapDelete("/{id:guid}", async (Guid id, IProjectStore store, CancellationToken ct) =>
+        {
+            var outcome = await store.DeleteAsync(id, ct);
+            return outcome switch
+            {
+                ProjectDeleteOutcome.Deleted => Results.NoContent(),
+                ProjectDeleteOutcome.Forbidden => Results.Problem(
+                    title: "Forbidden",
+                    detail: "Only the project owner can delete this project.",
+                    statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem(
+                    title: "Not Found",
+                    detail: "Project not found.",
+                    statusCode: StatusCodes.Status404NotFound),
+            };
+        })
+            .WithSummary("Delete a project (owner only)");
     }
 }

@@ -74,33 +74,9 @@ body {
 }
 .avatar-me { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-surface); }
 
-/* ---- Body: sidebar + main --------------------------------------------- */
+/* ---- Body: main (left navigation removed) ----------------------------- */
 .app-body { display: flex; min-height: calc(100vh - var(--topnav-height)); }
 
-.sidebar {
-  position: sticky; top: var(--topnav-height);
-  align-self: flex-start;
-  height: calc(100vh - var(--topnav-height));
-  width: var(--sidebar-width); flex: none;
-  display: flex; flex-direction: column;
-  padding: var(--space-4) var(--space-3);
-  background: var(--color-surface);
-  border-right: var(--border);
-}
-.side-nav { display: flex; flex-direction: column; gap: var(--space-1); }
-.side-link {
-  display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  font: var(--type-label-md); color: var(--color-on-surface-variant);
-  text-decoration: none; border-radius: var(--radius-sm);
-  border-left: 3px solid transparent;
-  cursor: pointer; transition: background .15s, color .15s;
-}
-.side-link:hover { background: var(--color-surface-container); color: var(--color-on-surface); }
-.side-link.active {
-  background: var(--color-primary-container); color: var(--color-on-primary-container);
-  font-weight: 700; border-left-color: var(--color-primary);
-}
 /* ---- Buttons ----------------------------------------------------------- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
@@ -113,6 +89,13 @@ body {
 .btn.primary:hover { background: var(--color-primary-hover); }
 .btn.outline { background: var(--color-surface); color: var(--color-on-surface); border-color: var(--color-outline); }
 .btn.outline:hover { background: var(--color-surface-container); }
+.btn.danger { background: var(--color-error); color: var(--color-on-error); }
+.btn.danger:hover { filter: brightness(1.06); }
+/* Disabled (e.g. Delete before the typed name matches) reads as greyed/inert per the design. */
+.btn:disabled, .btn.danger:disabled {
+  background: var(--color-surface-container-high); color: var(--color-on-surface-variant);
+  cursor: not-allowed; filter: none;
+}
 .btn.block { width: 100%; }
 
 /* ---- Main / page ------------------------------------------------------- */
@@ -120,7 +103,8 @@ body {
 .page {
   max-width: var(--content-max-width);
   margin: 0 auto;
-  padding: var(--space-8);
+  /* Extra bottom padding keeps the last card clear of the fixed delete zone. */
+  padding: var(--space-8) var(--space-8) 128px;
   display: flex; flex-direction: column; gap: var(--space-8);
 }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
@@ -156,6 +140,9 @@ body {
 .project-card:hover { border-color: var(--color-primary); }
 .project-card:active { transform: translateY(1px); }
 .project-card:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+/* Owner cards can be dragged to the delete zone; the grab cursor advertises it. */
+.project-card[draggable="true"] { cursor: grab; }
+.project-card.dragging { opacity: .4; cursor: grabbing; border-color: var(--color-error); }
 
 .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
 .card-id { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
@@ -222,6 +209,41 @@ body {
 }
 .toast.error { background: var(--color-error); color: var(--color-on-error); }
 
+/* ---- Drag-to-delete zone ----------------------------------------------- */
+.delete-zone {
+  position: fixed; left: 50%; bottom: var(--space-6); transform: translateX(-50%);
+  z-index: 30;
+  width: min(var(--content-max-width), calc(100vw - var(--space-8) * 2));
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-1);
+  padding: var(--space-4);
+  /* Dormant: greyed until a drag begins. pointer-events:none so it never blocks card clicks. */
+  color: var(--color-on-surface-variant);
+  background: var(--color-surface-container);
+  border: 2px dashed var(--color-outline);
+  opacity: .5;
+  pointer-events: none;
+  transition: opacity .15s, color .15s, background .15s, border-color .15s;
+}
+.delete-zone .material-symbols-outlined { font-size: 26px; }
+.delete-zone p {
+  margin: 0; font: var(--type-label-md); font-weight: 700;
+  text-transform: uppercase; letter-spacing: var(--tracking-caps);
+}
+/* Armed: a drag is in progress — switch to the live delete colour and accept drops. */
+.delete-zone.armed {
+  opacity: 1;
+  color: var(--color-error);
+  background: var(--color-error-container);
+  border-color: var(--color-error);
+  pointer-events: auto;
+}
+/* Over: a card is hovering the zone — stronger emphasis before release. */
+.delete-zone.over {
+  color: var(--color-on-error);
+  background: var(--color-error);
+  border-style: solid;
+}
+
 /* ---- Create-project modal ---------------------------------------------- */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 50;
@@ -236,6 +258,12 @@ body {
   border: var(--border); border-radius: var(--radius);
   /* Flat/border-led per the design system (STYLEGUIDE): no shadow — the scrim separates it. */
 }
+/* Compact variant for confirmation dialogs (e.g. delete). */
+.modal.modal-sm { max-width: 440px; }
+
+/* Delete-confirm dialog body: the cosmetic description naming the target project. */
+.delete-desc { margin: 0; font: var(--type-body-md); color: var(--color-on-surface-variant); }
+.delete-desc strong { color: var(--color-on-surface); font-weight: 700; }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
   padding: var(--space-4) var(--space-6);
@@ -332,7 +360,9 @@ body {
   .project-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 768px) {
-  .sidebar { display: none; }
+  /* Drag-to-delete is a pointer gesture (native HTML5 DnD isn't supported on touch) and would
+     collide with the bottom nav, so the zone is desktop-only. */
+  .delete-zone { display: none; }
   .app-header { padding: 0 var(--space-4); }
   .brand { display: none; }
   .search input { max-width: none; width: 100%; }
