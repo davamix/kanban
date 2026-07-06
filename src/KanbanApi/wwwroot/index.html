@@ -105,13 +105,15 @@
     <button class="bottom-link" type="button" data-soon="Tasks"><span class="material-symbols-outlined">assignment</span><span>Tasks</span></button>
   </nav>
 
-  <!-- Create-project modal (Stitch "Project Creation Form"). Hidden until "Create New". -->
+  <!-- Project form modal (Stitch "Project Creation Form"), reused for both create and edit. Hidden
+       until "Create New" (create mode) or a card's Edit affordance (edit mode); app.js swaps the
+       title, subtitle, and submit label per mode. -->
   <div id="createModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="createTitle">
     <div class="modal" role="document">
       <header class="modal-head">
         <div>
           <h2 id="createTitle" class="modal-title">New Project</h2>
-          <p class="modal-subtitle">Initialize a new workflow</p>
+          <p id="createSubtitle" class="modal-subtitle">Initialize a new workflow</p>
         </div>
         <button type="button" class="icon-btn" id="createClose" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
       </header>

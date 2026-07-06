@@ -4,11 +4,13 @@
 
 ## Status summary
 
-✅ **Implemented + tested** for the project read model **and the first owner-gated mutation**
-(`DELETE /api/projects/{id}`, ADR 0005). The owner/assignee global query filter and the anonymous-401
-gate are pinned by [ProjectsEndpointTests](../../../tests/KanbanApi.IntegrationTests/ProjectsEndpointTests.cs);
+✅ **Implemented + tested** for the project read model **and the owner-gated mutations**
+(`DELETE /api/projects/{id}`, ADR 0005; `PUT /api/projects/{id}`, ADR 0006). The owner/assignee global
+query filter and the anonymous-401 gate are pinned by [ProjectsEndpointTests](../../../tests/KanbanApi.IntegrationTests/ProjectsEndpointTests.cs);
 the owner-only delete boundary (owner → 204, assignee → 403, stranger → 404 with no existence leak) by
-[DeleteProjectEndpointTests](../../../tests/KanbanApi.IntegrationTests/DeleteProjectEndpointTests.cs).
+[DeleteProjectEndpointTests](../../../tests/KanbanApi.IntegrationTests/DeleteProjectEndpointTests.cs), and
+the identical owner-only edit boundary (owner → 200, assignee → 403, stranger → 404) by
+[UpdateProjectEndpointTests](../../../tests/KanbanApi.IntegrationTests/UpdateProjectEndpointTests.cs).
 
 ---
 
@@ -31,7 +33,7 @@ the owner-only delete boundary (owner → 204, assignee → 403, stranger → 40
 
 | Req | L | State | Notes |
 |-----|---|-------|-------|
-| V8.3.1 | 1 | ✅ | Trusted-layer enforcement for mutations: endpoint `RequireAuthorization()` + owner check + DB query filter. `DELETE /api/projects/{id}` ([EfProjectStore.DeleteAsync](../../../src/KanbanApi/Services/EfProjectStore.cs), [ProjectEndpoints.cs](../../../src/KanbanApi/Endpoints/ProjectEndpoints.cs)) loads through the query filter then re-checks ownership: owner-only delete, visible-but-not-owner → 403, not-visible → 404 (no existence leak). Pinned by `DeleteProjectEndpointTests` (`Delete_AsAssignee_IsForbidden_AndProjectSurvives`, `Delete_AsStranger_Returns404_WithoutLeakingExistence_AndProjectSurvives`). Project edit/assign follow the same pattern when added. |
+| V8.3.1 | 1 | ✅ | Trusted-layer enforcement for mutations: endpoint `RequireAuthorization()` + owner check + DB query filter. `DELETE /api/projects/{id}` ([EfProjectStore.DeleteAsync](../../../src/KanbanApi/Services/EfProjectStore.cs), [ProjectEndpoints.cs](../../../src/KanbanApi/Endpoints/ProjectEndpoints.cs)) loads through the query filter then re-checks ownership: owner-only delete, visible-but-not-owner → 403, not-visible → 404 (no existence leak). Pinned by `DeleteProjectEndpointTests` (`Delete_AsAssignee_IsForbidden_AndProjectSurvives`, `Delete_AsStranger_Returns404_WithoutLeakingExistence_AndProjectSurvives`). `PUT /api/projects/{id}` ([EfProjectStore.UpdateAsync](../../../src/KanbanApi/Services/EfProjectStore.cs)) applies the same load-through-filter-then-owner-check pattern for editing — pinned by `UpdateProjectEndpointTests` (`Update_AsAssignee_IsForbidden_AndUnchanged`, `Update_AsStranger_Returns404_WithoutLeakingExistence_AndUnchanged`). Assignee management follows the same pattern when added. |
 
 ## V8.4 — Other considerations
 

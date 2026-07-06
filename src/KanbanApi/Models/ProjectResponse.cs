@@ -33,3 +33,16 @@ public sealed record CreateProjectRequest(
     DateOnly? EndDate,
     decimal? Budget,
     IReadOnlyList<string>? AssigneeIds);
+
+/// <summary>
+/// Edit-project payload from the edit form. Same shape as <see cref="CreateProjectRequest"/> — the
+/// whole editable project is replaced. Editing is owner-only (the owner is never changed and never
+/// comes from the payload); the owner is always kept among <see cref="AssigneeIds"/> server-side.
+/// </summary>
+public sealed record UpdateProjectRequest(
+    string Name,
+    string? Description,
+    DateOnly? StartDate,
+    DateOnly? EndDate,
+    decimal? Budget,
+    IReadOnlyList<string>? AssigneeIds);
