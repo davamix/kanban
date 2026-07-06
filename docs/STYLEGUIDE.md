@@ -28,8 +28,9 @@ flat/square shape, neutral scale, Material-3 token naming, Inter) is shared.
 
 ## Components (this screen)
 
-- **App shell:** sticky top header (brand · search · user + logout) + a nav-only left sidebar
-  (Dashboard active) that collapses to a bottom nav below `--sidebar-breakpoint`.
+- **App shell:** sticky top header (brand · search · user + logout) over a full-width content area.
+  The left sidebar was removed with the drag-to-delete refinement (ADR 0005); a bottom nav still
+  shows below `--sidebar-breakpoint`.
 - **Stat tile:** icon chip + label + value, on a bordered surface card.
 - **Project card:** icon + name + role **badge** (`Owner` / `Shared`), 2-line description,
   footer with an **avatar stack** (initials) + the date range. The whole card is the click target

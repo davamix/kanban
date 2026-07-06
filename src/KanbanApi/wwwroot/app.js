@@ -119,9 +119,22 @@ function cardHtml(p) {
   const badge = p.isOwner
     ? `<span class="badge owner">Owner</span>`
     : `<span class="badge shared">Shared</span>`;
-  // Only the owner can delete a project, so only owner cards are draggable onto the delete zone.
+  // A spoken summary for screen readers (the card's visual bits are decorative on their own).
+  const ariaLabel = escapeHtml(
+    `Project: ${p.name}. ${p.isOwner ? "Owned by you" : "Shared with you"}. ${fmtRange(p.startDate, p.endDate)}.`);
+  // Only the owner can delete a project, so only owner cards are draggable and carry the delete
+  // affordance. Two keyboard/assistive-tech paths to the same confirm dialog (mirroring dragging the
+  // card onto the delete zone): pressing Delete while the card is focused (advertised via
+  // aria-keyshortcuts), and a per-card Delete button that is screen-reader-only until focused, then
+  // revealed at the card's top-right. Enter on the card is reserved for opening the project (next
+  // screen). See ADR 0005 (accessible drag-and-drop follow-up).
+  const deleteBtn = p.isOwner
+    ? `<button type="button" class="card-delete" data-delete aria-label="Delete project ${escapeHtml(p.name)}">Delete</button>`
+    : "";
+  const deleteShortcut = p.isOwner ? ` aria-keyshortcuts="Delete"` : "";
   return `
-    <article class="project-card" tabindex="0" draggable="${p.isOwner ? "true" : "false"}" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name.toLowerCase())}">
+    <article class="project-card" tabindex="0" draggable="${p.isOwner ? "true" : "false"}"${deleteShortcut}
+             aria-label="${ariaLabel}" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name.toLowerCase())}">
       <div class="card-top">
         <div class="card-id">
           <span class="card-icon material-symbols-outlined" style="font-variation-settings:'FILL' 1;">${iconFor(p.id)}</span>
@@ -134,6 +147,7 @@ function cardHtml(p) {
         ${avatarStack(p.assignees)}
         <span class="card-dates"><span class="material-symbols-outlined">event</span>${escapeHtml(fmtRange(p.startDate, p.endDate))}</span>
       </div>
+      ${deleteBtn}
     </article>`;
 }
 
@@ -444,32 +458,51 @@ function wireDeleteModal() {
 
 // Native HTML5 drag-and-drop: dragging an (owner) card arms the delete zone; dropping opens the
 // confirm dialog. The zone is greyed and pointer-events:none until armed (so it never blocks clicks).
+const DELETE_ZONE_LABEL = "Drop here to delete project";
+
 function wireDragToDelete() {
   const grid = document.getElementById("projectGrid");
   const zone = document.getElementById("deleteZone");
+  const label = document.getElementById("deleteZoneLabel");
+  const status = document.getElementById("dragStatus");
   let dragId = null;
+  let dragName = null;
+
+  // Announce drag progress to screen readers via the polite live region.
+  const announce = (msg) => { if (status) status.textContent = msg; };
+  // Reset the zone to its dormant label + clear the announcement.
+  const resetZone = () => { label.textContent = DELETE_ZONE_LABEL; announce(""); };
 
   grid.addEventListener("dragstart", (e) => {
     const card = e.target.closest(".project-card");
     if (!card || card.getAttribute("draggable") !== "true") return;
     dragId = card.dataset.id;
+    dragName = state.projects.find((p) => p.id === dragId)?.name ?? "this project";
     e.dataTransfer.setData("text/plain", dragId);
     e.dataTransfer.effectAllowed = "move";
     card.classList.add("dragging");
     zone.classList.add("armed");   // grey → live delete colour
+    // The zone now names what's being dragged (visual + spoken feedback).
+    label.textContent = `Release “${dragName}” here to delete`;
+    announce(`“${dragName}” grabbed. Drop it on the delete zone to remove it.`);
   });
   grid.addEventListener("dragend", (e) => {
     const card = e.target.closest(".project-card");
     if (card) card.classList.remove("dragging");
     zone.classList.remove("armed", "over");
+    resetZone();
     dragId = null;
+    dragName = null;
   });
 
   zone.addEventListener("dragover", (e) => {
     if (dragId === null) return;
     e.preventDefault();                     // required to allow a drop
     e.dataTransfer.dropEffect = "move";
-    zone.classList.add("over");
+    if (!zone.classList.contains("over")) {   // announce only on entry, not every tick
+      zone.classList.add("over");
+      announce(`Over delete zone. Release to delete “${dragName}”.`);
+    }
   });
   zone.addEventListener("dragleave", (e) => {
     if (!zone.contains(e.relatedTarget)) zone.classList.remove("over");
@@ -478,6 +511,7 @@ function wireDragToDelete() {
     e.preventDefault();
     const id = e.dataTransfer.getData("text/plain") || dragId;
     zone.classList.remove("armed", "over");
+    // The confirm dialog (and, on success, the toast) carries feedback from here on.
     if (id) openDeleteModal(id);
   });
 }
@@ -504,10 +538,30 @@ function wireStaticHandlers() {
     renderProjects();
   });
 
-  // Opening a project board is the next screen.
-  document.getElementById("projectGrid").addEventListener("click", (e) => {
+  // The per-card Delete button (click / screen-reader path) opens the confirm dialog; anywhere else
+  // on a card opens its board (the next screen). The delete branch comes first and stops here so the
+  // click doesn't also fall through to the board.
+  const grid = document.getElementById("projectGrid");
+  grid.addEventListener("click", (e) => {
+    const del = e.target.closest("[data-delete]");
+    if (del) {
+      const card = del.closest(".project-card");
+      if (card) openDeleteModal(card.dataset.id);
+      return;
+    }
     const card = e.target.closest(".project-card");
     if (card) showToast("Project board — coming soon");
+  });
+
+  // Keyboard path: pressing Delete (or Backspace, the "delete" key on many keyboards) while an owner
+  // card itself holds focus opens the confirm dialog. Enter is deliberately left free for opening the
+  // project (a later screen). Only fires when the card — not the in-card Delete button — is focused.
+  grid.addEventListener("keydown", (e) => {
+    if (e.key !== "Delete" && e.key !== "Backspace") return;
+    const card = e.target.closest(".project-card");
+    if (!card || card !== e.target || card.getAttribute("draggable") !== "true") return;
+    e.preventDefault();
+    openDeleteModal(card.dataset.id);
   });
 }
 
