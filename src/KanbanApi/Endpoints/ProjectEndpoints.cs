@@ -25,23 +25,7 @@ public static class ProjectEndpoints
         // problem details); the store enforces owner-from-session and assignee resolution.
         group.MapPost("/", async (CreateProjectRequest request, IProjectStore store, CancellationToken ct) =>
         {
-            var errors = new Dictionary<string, string[]>();
-            var name = request.Name?.Trim();
-            if (string.IsNullOrEmpty(name))
-                errors["name"] = ["Project name is required."];
-            else if (name.Length > 200)
-                errors["name"] = ["Project name must be 200 characters or fewer."];
-            if (request.Description is { Length: > 2000 })
-                errors["description"] = ["Description must be 2000 characters or fewer."];
-            if (request.StartDate is null)
-                errors["startDate"] = ["Start date is required."];
-            if (request.EndDate is null)
-                errors["endDate"] = ["End date is required."];
-            else if (request.StartDate is { } start && request.EndDate is { } end && end < start)
-                errors["endDate"] = ["End date must be on or after the start date."];
-            if (request.Budget is < 0)
-                errors["budget"] = ["Budget cannot be negative."];
-
+            var errors = ValidateProject(request.Name, request.Description, request.StartDate, request.EndDate, request.Budget);
             if (errors.Count > 0)
                 return Results.ValidationProblem(errors);
 
@@ -49,6 +33,31 @@ public static class ProjectEndpoints
             return Results.Created($"/api/projects/{created.Id}", created);
         })
             .WithSummary("Create a project owned by the current user");
+
+        // PUT /api/projects/{id} — replace a project's editable fields + assignees. Owner-only; the
+        // store scopes the lookup to visible projects (so a hidden id is a 404, not a 403 that would
+        // confirm existence) and gates the mutation on ownership. Same shape validation as create.
+        group.MapPut("/{id:guid}", async (Guid id, UpdateProjectRequest request, IProjectStore store, CancellationToken ct) =>
+        {
+            var errors = ValidateProject(request.Name, request.Description, request.StartDate, request.EndDate, request.Budget);
+            if (errors.Count > 0)
+                return Results.ValidationProblem(errors);
+
+            var result = await store.UpdateAsync(id, request, ct);
+            return result.Outcome switch
+            {
+                ProjectUpdateOutcome.Updated => Results.Ok(result.Project),
+                ProjectUpdateOutcome.Forbidden => Results.Problem(
+                    title: "Forbidden",
+                    detail: "Only the project owner can edit this project.",
+                    statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem(
+                    title: "Not Found",
+                    detail: "Project not found.",
+                    statusCode: StatusCodes.Status404NotFound),
+            };
+        })
+            .WithSummary("Update a project (owner only)");
 
         // DELETE /api/projects/{id} — remove a project. Owner-only; the store scopes the lookup to
         // visible projects (so a hidden id is a 404, not a 403 that would confirm existence) and
@@ -70,5 +79,29 @@ public static class ProjectEndpoints
             };
         })
             .WithSummary("Delete a project (owner only)");
+    }
+
+    // Shape validation shared by create (POST) and edit (PUT): the two carry identical fields.
+    // Returns RFC 9457 field errors keyed by camelCase name (the shape the SPA maps to inputs).
+    private static Dictionary<string, string[]> ValidateProject(
+        string? name, string? description, DateOnly? startDate, DateOnly? endDate, decimal? budget)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var trimmed = name?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+            errors["name"] = ["Project name is required."];
+        else if (trimmed.Length > 200)
+            errors["name"] = ["Project name must be 200 characters or fewer."];
+        if (description is { Length: > 2000 })
+            errors["description"] = ["Description must be 2000 characters or fewer."];
+        if (startDate is null)
+            errors["startDate"] = ["Start date is required."];
+        if (endDate is null)
+            errors["endDate"] = ["End date is required."];
+        else if (startDate is { } start && endDate is { } end && end < start)
+            errors["endDate"] = ["End date must be on or after the start date."];
+        if (budget is < 0)
+            errors["budget"] = ["Budget cannot be negative."];
+        return errors;
     }
 }

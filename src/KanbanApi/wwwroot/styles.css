@@ -172,6 +172,40 @@ body {
 /* When the reveal button is focused, hide the co-located Owner badge so the red pill owns the corner. */
 .project-card:has(.card-delete:focus) .badge.owner { visibility: hidden; }
 
+/* Hover/focus action panel: an owner-only drawer that reveals below the card, holding the Edit
+   affordance (Space is the keyboard equivalent; Enter/click opens the board). Absolutely positioned
+   so revealing it never reflows the grid; dormant it's transparent to the pointer so it can't block
+   the card beneath. It appears on hover, on card focus, and when the Edit button itself is tabbed to
+   (focus-within). Same surface/border tokens as the card, reading as a tray sliding out from under it. */
+.card-actions {
+  position: absolute; top: calc(100% - var(--radius)); left: 0; right: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2);
+  padding: calc(var(--radius) + var(--space-2)) var(--space-3) var(--space-2);
+  background: var(--color-surface-container);
+  border: var(--border); border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  opacity: 0; transform: translateY(calc(-1 * var(--space-2))); pointer-events: none;
+  transition: opacity .15s, transform .15s;
+}
+.project-card:hover .card-actions,
+.project-card:focus-visible .card-actions,
+.project-card:focus-within .card-actions {
+  opacity: 1; transform: translateY(0); pointer-events: auto;
+}
+.card-edit {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  font: var(--type-label-md); font-weight: 600;
+  color: var(--color-primary); background: var(--color-surface);
+  border: var(--border-width) solid var(--color-outline); border-radius: var(--radius-sm);
+  cursor: pointer; transition: background .15s, border-color .15s;
+}
+/* On the primary-container fill, use its paired on-color (matching .badge.owner / .chip.owner) so the
+   label keeps WCAG AA contrast — the resting #primary-on-surface pairing doesn't hold on this tint. */
+.card-edit:hover { color: var(--color-on-primary-container); background: var(--color-primary-container); border-color: var(--color-primary); }
+.card-edit:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.card-edit .material-symbols-outlined { font-size: 18px; }
+
 .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
 .card-id { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .card-icon {

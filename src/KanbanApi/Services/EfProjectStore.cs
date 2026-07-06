@@ -45,31 +45,7 @@ public sealed class EfProjectStore(
         var me = currentUser.Id
             ?? throw new InvalidOperationException("Cannot create a project without a current user.");
 
-        // Resolve the Logto directory once, keyed by sub, to validate + name the assignees.
-        var users = (await directory.GetUsersAsync(null, ct)).ToDictionary(u => u.Id);
-
-        // Keep only requested assignees that are real directory users; the owner is always assigned
-        // (and may not appear in the snapshot, so add explicitly). Distinct, order-independent.
-        var assigneeIds = (request.AssigneeIds ?? [])
-            .Where(users.ContainsKey)
-            .Append(me)
-            .Distinct()
-            .ToList();
-
-        // Mirror each assignee into the local users table (FK target), enriching names/emails from
-        // the directory so cards render without re-querying Logto. FindAsync hits the tracker first.
-        foreach (var id in assigneeIds)
-        {
-            users.TryGetValue(id, out var dir);
-            var existing = await db.Users.FindAsync([id], ct);
-            if (existing is null)
-                db.Users.Add(new AppUser { Id = id, DisplayName = dir?.Name ?? (id == me ? currentUser.DisplayName : null), Email = dir?.Email ?? (id == me ? currentUser.Email : null) });
-            else
-            {
-                existing.DisplayName ??= dir?.Name ?? (id == me ? currentUser.DisplayName : null);
-                existing.Email ??= dir?.Email ?? (id == me ? currentUser.Email : null);
-            }
-        }
+        var (assigneeIds, directorySnapshot) = await ResolveAssigneesAsync(request.AssigneeIds, me, ct);
 
         var now = DateTimeOffset.UtcNow;
         var project = new Project
@@ -91,14 +67,94 @@ public sealed class EfProjectStore(
         db.Projects.Add(project);
         await db.SaveChangesAsync(ct);
 
+        return OwnerResponse(project, assigneeIds, directorySnapshot, me);
+    }
+
+    // Resolve requested assignees against the Logto directory (dropping unknown ids), always include
+    // the owner (who may not appear in the snapshot), and mirror each into the local users table (FK
+    // target), enriching names/emails from the directory so cards render without re-querying Logto.
+    // Returns the desired id list (distinct, order-independent) plus the directory snapshot for naming.
+    private async Task<(List<string> Ids, Dictionary<string, DirectoryUser> Directory)> ResolveAssigneesAsync(
+        IReadOnlyList<string>? requestedIds, string me, CancellationToken ct)
+    {
+        var users = (await directory.GetUsersAsync(null, ct)).ToDictionary(u => u.Id);
+        var ids = (requestedIds ?? [])
+            .Where(users.ContainsKey)
+            .Append(me)
+            .Distinct()
+            .ToList();
+
+        foreach (var id in ids)
+        {
+            users.TryGetValue(id, out var dir);
+            var existing = await db.Users.FindAsync([id], ct);   // FindAsync hits the tracker first.
+            if (existing is null)
+                db.Users.Add(new AppUser { Id = id, DisplayName = dir?.Name ?? (id == me ? currentUser.DisplayName : null), Email = dir?.Email ?? (id == me ? currentUser.Email : null) });
+            else
+            {
+                existing.DisplayName ??= dir?.Name ?? (id == me ? currentUser.DisplayName : null);
+                existing.Email ??= dir?.Email ?? (id == me ? currentUser.Email : null);
+            }
+        }
+        return (ids, users);
+    }
+
+    // The owner's read model for a just-created/updated project: the caller is always the owner, so
+    // IsOwner/Role are fixed. Assignee names come from the directory snapshot, falling back to the
+    // caller's own claims for the owner (who may be absent from the directory).
+    private ProjectResponse OwnerResponse(
+        Project project, IEnumerable<string> assigneeIds, IReadOnlyDictionary<string, DirectoryUser> directorySnapshot, string me)
+    {
         var assignees = assigneeIds
             .Select(id => new AssigneeSummary(id,
-                users.TryGetValue(id, out var dir) ? dir.Name : (id == me ? currentUser.DisplayName : null)))
+                directorySnapshot.TryGetValue(id, out var dir) ? dir.Name : (id == me ? currentUser.DisplayName : null)))
             .ToList();
 
         return new ProjectResponse(
             project.Id, project.Name, project.Description, project.StartDate, project.EndDate,
             project.Budget, me, IsOwner: true, Role: "owner", assignees);
+    }
+
+    public async Task<ProjectUpdateResult> UpdateAsync(Guid id, UpdateProjectRequest request, CancellationToken ct = default)
+    {
+        // Owner is the authenticated caller — never a request field (ASVS V8). Fail closed if unset.
+        var me = currentUser.Id
+            ?? throw new InvalidOperationException("Cannot update a project without a current user.");
+
+        // The global query filter scopes this to projects the caller can see (owner or assignee), so
+        // an id they have no access to is simply "not found" — no existence leak (ASVS V8). Track it
+        // (with its assignees) so we can mutate in place.
+        var project = await db.Projects
+            .Include(p => p.Assignees)
+            .FirstOrDefaultAsync(p => p.Id == id, ct);
+        if (project is null)
+            return new ProjectUpdateResult(ProjectUpdateOutcome.NotFound, null);
+
+        // Edit is owner-only: an assignee can read the project but must not modify it.
+        if (project.OwnerId != me)
+            return new ProjectUpdateResult(ProjectUpdateOutcome.Forbidden, null);
+
+        var (desiredIds, directorySnapshot) = await ResolveAssigneesAsync(request.AssigneeIds, me, ct);
+
+        project.Name = request.Name.Trim();
+        project.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        // Non-null by validation at the endpoint (both dates are required before we get here).
+        project.StartDate = request.StartDate!.Value;
+        project.EndDate = request.EndDate!.Value;
+        project.Budget = request.Budget;
+
+        // Reconcile assignees: drop those no longer desired (join rows delete via the required FK),
+        // add the newly-selected ones. The owner is always in desiredIds, so it can never be dropped.
+        var currentIds = project.Assignees.Select(a => a.UserId).ToHashSet();
+        foreach (var a in project.Assignees.Where(a => !desiredIds.Contains(a.UserId)).ToList())
+            project.Assignees.Remove(a);
+        foreach (var uid in desiredIds.Where(uid => !currentIds.Contains(uid)))
+            project.Assignees.Add(new ProjectAssignee { ProjectId = project.Id, UserId = uid });
+
+        await db.SaveChangesAsync(ct);
+
+        var response = OwnerResponse(project, desiredIds, directorySnapshot, me);
+        return new ProjectUpdateResult(ProjectUpdateOutcome.Updated, response);
     }
 
     public async Task<ProjectDeleteOutcome> DeleteAsync(Guid id, CancellationToken ct = default)
