@@ -89,8 +89,8 @@
   <!-- Drag-to-delete zone (desktop). Greyed/dormant until a project card drag begins, then it
        switches to the live "delete" (error) colour and accepts the drop. Dropping a card opens
        the name-verification confirm dialog below. -->
-  <div id="deleteZone" class="delete-zone" aria-hidden="true">
-    <span class="material-symbols-outlined">delete_forever</span>
+  <div id="deleteZone" class="delete-zone" role="region" aria-label="Project deletion drop zone">
+    <span class="material-symbols-outlined" aria-hidden="true">delete_forever</span>
     <p>Drop here to delete project</p>
   </div>
 

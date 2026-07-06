@@ -61,9 +61,19 @@ holding open since ADR 0003.
   leak), unknown id → `404`, anonymous → `401`. This flips ASVS **V8.3.1** from ⏳ to ✅.
 - The selection screen loses its left navigation panel (the nav links were placeholders); primary
   navigation on mobile is unchanged (bottom nav).
-- **Known limitation (inherited from the Stitch design): delete is pointer-only.** The action is
-  reachable solely via native HTML5 drag-and-drop, so keyboard-only and touch users currently have no
-  path to it. This faithfully ports the mockup; if a11y parity is required, add a keyboard-reachable
-  alternative (e.g. a delete action in a card overflow menu) that calls the same confirm modal.
+- ~~**Known limitation (inherited from the Stitch design): delete is pointer-only.**~~
+  **Resolved (2026-07-06, follow-up).** The initial implementation reached delete only via native
+  HTML5 drag-and-drop, leaving keyboard and screen-reader users with no path to it. The Stitch screen
+  *"Project Selection - Accessible Drag-and-Drop Refinement"* adds an **accessible delete affordance**:
+  each owner card is now a labelled `role="article"` (spoken `aria-label`: name · ownership · dates)
+  with two keyboard/AT paths to the same name-verification confirm modal, and the drop zone is a
+  labelled `role="region"`:
+  - **Press `Delete` (or `Backspace`) while a card is focused** — the primary keyboard path,
+    advertised to screen readers via `aria-keyshortcuts="Delete"`. `Enter` is deliberately reserved
+    for **opening the project** (a later screen), so it is not bound to delete.
+  - **A per-card Delete button that is screen-reader-only until focused**, then revealed at the card's
+    top-right — the click / screen-reader affordance (activated with Enter/Space *on the button*).
+
+  Drag-and-drop remains the pointer path; all three share one confirm modal.
 - Still deferred: project **edit** + assignee management, Calendar mirroring on delete, and the
   **board** screen.
