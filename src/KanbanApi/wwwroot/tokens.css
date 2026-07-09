@@ -46,6 +46,7 @@
 
   /* ---- Typography ---- */
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;   /* code in Markdown preview */
 
   /* shorthand: <weight> <size>/<line> — pair with --tracking-* where noted */
   --type-headline-lg: 700 32px/40px var(--font-sans);

@@ -65,7 +65,7 @@
 
   <!-- Task form modal (Stitch "Task Creation Form - Final Harmonization"), reused for create + edit. -->
   <div id="taskModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="taskTitle">
-    <div class="modal" role="document">
+    <div class="modal" id="taskDialog" role="document">
       <header class="modal-head">
         <div>
           <h2 id="taskTitle" class="modal-title">Create New Task</h2>
@@ -76,7 +76,7 @@
 
       <form id="taskForm" class="modal-form" novalidate>
         <!-- General Information -->
-        <section class="form-section">
+        <section class="form-section" id="descSection">
           <div class="section-head">
             <span class="material-symbols-outlined">description</span>
             <h3>General Information</h3>
@@ -87,10 +87,27 @@
                    aria-describedby="err-title" placeholder="Enter a task heading…" />
             <p id="err-title" class="field-error" data-error="title"></p>
           </div>
-          <div class="field">
-            <label for="fTaskDescription">Description</label>
-            <textarea id="fTaskDescription" name="description" rows="4" maxlength="2000" aria-describedby="err-description"
-                      placeholder="Outline the scope, requirements, and expected outcomes of this task…"></textarea>
+          <div class="field" id="descField">
+            <div class="field-label-row">
+              <label for="fTaskDescription">Description</label>
+              <div class="editor-toolbar" role="group" aria-label="Description editor mode">
+                <button type="button" class="editor-tab active" id="descWriteTab" aria-pressed="true">
+                  <span class="material-symbols-outlined">code</span>Write
+                </button>
+                <button type="button" class="editor-tab" id="descPreviewTab" aria-pressed="false">
+                  <span class="material-symbols-outlined">visibility</span>Preview
+                </button>
+                <button type="button" class="icon-btn sm" id="descExpand" aria-pressed="false"
+                        aria-label="Expand editor" title="Expand editor">
+                  <span class="material-symbols-outlined">open_in_full</span>
+                </button>
+              </div>
+            </div>
+            <textarea id="fTaskDescription" name="description" rows="4" maxlength="2000"
+                      aria-describedby="err-description descHint"
+                      placeholder="Write in Markdown…"></textarea>
+            <div id="descPreview" class="markdown-preview hidden" aria-live="polite"></div>
+            <p id="descHint" class="field-hint">Markdown supported — switch to Preview to see it rendered.</p>
             <p id="err-description" class="field-error" data-error="description"></p>
           </div>
         </section>
@@ -201,6 +218,7 @@
   <div id="toast" class="toast hidden" role="status"></div>
 
   <script src="common.js?v=1"></script>
+  <script src="markdown.js?v=1"></script>
   <script src="board.js?v=1"></script>
 </body>
 </html>
