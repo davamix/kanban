@@ -355,12 +355,41 @@ function openTaskModal(task = null, defaultColumnId = null) {
   document.getElementById("fLabelInput").value = "";
   renderLabelChips();
 
+  // Always open the description editor in Write mode, collapsed.
+  document.getElementById("taskDialog").classList.remove("desc-expanded");
+  document.getElementById("descExpand").setAttribute("aria-pressed", "false");
+  setDescMode("write");
+
   document.getElementById("taskModal").classList.remove("hidden");
   document.getElementById("fTitle").focus();
 }
 function closeTaskModal() {
   document.getElementById("taskModal").classList.add("hidden");
   if (lastFocused && typeof lastFocused.focus === "function") lastFocused.focus();
+}
+
+// Description editor: Write (raw Markdown textarea) ↔ Preview (rendered, safe HTML from markdown.js).
+function setDescMode(mode) {
+  const write = mode !== "preview";
+  const ta = document.getElementById("fTaskDescription");
+  const preview = document.getElementById("descPreview");
+  const writeTab = document.getElementById("descWriteTab");
+  const previewTab = document.getElementById("descPreviewTab");
+  writeTab.classList.toggle("active", write);
+  writeTab.setAttribute("aria-pressed", String(write));
+  previewTab.classList.toggle("active", !write);
+  previewTab.setAttribute("aria-pressed", String(!write));
+  ta.classList.toggle("hidden", !write);
+  preview.classList.toggle("hidden", write);
+  // renderMarkdown (markdown.js) is safe by construction — it escapes input before transforming.
+  if (!write) preview.innerHTML = renderMarkdown(ta.value) || '<p class="md-empty">Nothing to preview.</p>';
+}
+// Expand focuses the description: the dialog keeps its size, the other form sections hide, and the
+// editor fills the available height. Toggled on the dialog so the CSS can restructure the whole form.
+function toggleDescExpand() {
+  const dialog = document.getElementById("taskDialog");
+  const expanded = dialog.classList.toggle("desc-expanded");
+  document.getElementById("descExpand").setAttribute("aria-pressed", String(expanded));
 }
 
 async function submitTaskForm(e) {
@@ -437,6 +466,9 @@ function wireTaskModal() {
   document.getElementById("fLabelInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addLabelFromInput(); }
   });
+  document.getElementById("descWriteTab").addEventListener("click", () => setDescMode("write"));
+  document.getElementById("descPreviewTab").addEventListener("click", () => setDescMode("preview"));
+  document.getElementById("descExpand").addEventListener("click", toggleDescExpand);
   wireModalChrome(modal, closeTaskModal);
 }
 

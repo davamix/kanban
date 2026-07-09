@@ -544,6 +544,71 @@ button.column-add:hover { color: var(--color-primary); border-color: var(--color
 .btn.danger.ghost { background: transparent; color: var(--color-error); border-color: transparent; }
 .btn.danger.ghost:hover { background: var(--color-error-container); filter: none; }
 
+/* ---- Task Description: Markdown editor (Write / Preview / Expand) ------- */
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.editor-toolbar { display: flex; align-items: center; gap: var(--space-1); }
+.editor-tab {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font: var(--type-label-sm); font-weight: 600; color: var(--color-on-surface-variant);
+  background: transparent; border: var(--border-width) solid transparent; border-radius: var(--radius-sm);
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.editor-tab:hover { color: var(--color-on-surface); background: var(--color-surface-container); }
+.editor-tab.active { color: var(--color-primary); background: var(--color-surface); border-color: var(--color-outline-variant); }
+.editor-tab:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.editor-tab .material-symbols-outlined { font-size: 16px; }
+
+/* Rendered Markdown preview — mirrors the textarea's box, styled read-only content. */
+.markdown-preview {
+  min-height: 88px;
+  padding: var(--space-2) var(--space-3);
+  font: var(--type-body-sm); color: var(--color-on-surface);
+  background: var(--color-surface-container);
+  border: var(--border-width) solid var(--color-outline-variant); border-radius: var(--radius-sm);
+  overflow-y: auto; overflow-wrap: anywhere;
+}
+.markdown-preview > :first-child { margin-top: 0; }
+.markdown-preview > :last-child { margin-bottom: 0; }
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3,
+.markdown-preview h4, .markdown-preview h5, .markdown-preview h6 { margin: var(--space-3) 0 var(--space-2); line-height: 1.25; }
+.markdown-preview h1 { font: var(--type-headline-sm); }
+.markdown-preview h2 { font: var(--type-title-sm); }
+.markdown-preview h3 { font: var(--type-label-md); font-weight: 700; }
+.markdown-preview p { margin: 0 0 var(--space-2); }
+.markdown-preview ul, .markdown-preview ol { margin: 0 0 var(--space-2); padding-left: var(--space-6); }
+.markdown-preview li { margin: 2px 0; }
+.markdown-preview a { color: var(--color-primary); text-decoration: underline; }
+.markdown-preview code {
+  font-family: var(--font-mono); font-size: 0.9em;
+  padding: 1px var(--space-1); background: var(--color-surface-container-high); border-radius: var(--radius-sm);
+}
+.markdown-preview .md-pre {
+  margin: 0 0 var(--space-2); padding: var(--space-3); overflow-x: auto;
+  background: var(--color-inverse-surface); color: var(--color-inverse-on-surface); border-radius: var(--radius-sm);
+}
+.markdown-preview .md-pre code { padding: 0; background: transparent; color: inherit; }
+.markdown-preview blockquote {
+  margin: 0 0 var(--space-2); padding: var(--space-1) var(--space-3);
+  color: var(--color-on-surface-variant); border-left: 3px solid var(--color-outline);
+}
+.markdown-preview hr { border: none; border-top: var(--border); margin: var(--space-3) 0; }
+.markdown-preview .md-empty { color: var(--color-on-surface-variant); font-style: italic; }
+
+/* Expanded editor — a focus mode: the dialog keeps its size, the other sections hide, and the
+   Description (Write or Preview) fills the available height. */
+.modal.desc-expanded { display: flex; flex-direction: column; height: min(88vh, 880px); }
+.modal.desc-expanded .modal-form { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+/* Hide every section except General Information, and within it the header + Title, leaving the field. */
+.modal.desc-expanded .modal-form > .form-section:not(#descSection) { display: none; }
+.modal.desc-expanded #descSection { flex: 1 1 auto; min-height: 0; }
+.modal.desc-expanded #descSection > .section-head,
+.modal.desc-expanded #descSection > .field:not(#descField) { display: none; }
+.modal.desc-expanded #descField { flex: 1 1 auto; min-height: 0; }
+.modal.desc-expanded #fTaskDescription,
+.modal.desc-expanded .markdown-preview { flex: 1 1 auto; min-height: 0; }
+#descExpand[aria-pressed="true"] { color: var(--color-primary); background: var(--color-surface-container); }
+
 /* ---- Responsive -------------------------------------------------------- */
 @media (max-width: 1100px) {
   .project-grid { grid-template-columns: repeat(2, 1fr); }
