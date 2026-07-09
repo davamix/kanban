@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kanban — Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap" />
+  <link rel="stylesheet" href="tokens.css?v=1" />
+  <link rel="stylesheet" href="styles.css?v=1" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗂️</text></svg>" />
+</head>
+<body>
+  <!-- Top navigation — mirrors the selection screen; the brand returns to the project list. -->
+  <header class="app-header">
+    <div class="header-left">
+      <a class="brand" href="index.html">Kanban</a>
+    </div>
+    <div class="header-right">
+      <form id="searchForm" class="search" role="search">
+        <span class="material-symbols-outlined search-icon">search</span>
+        <input id="searchInput" type="search" placeholder="Search tasks…" autocomplete="off" />
+      </form>
+      <span class="user-chip" title="Signed-in user">
+        <span id="userAvatar" class="avatar avatar-me" aria-hidden="true">–</span>
+        <span id="userName" class="user-name"></span>
+      </span>
+      <form id="logoutForm" method="post" action="/logout" class="logout-form">
+        <input type="hidden" name="__RequestVerificationToken" id="csrfField" />
+        <button class="icon-btn" type="submit" aria-label="Sign out" title="Sign out"><span class="material-symbols-outlined">logout</span></button>
+      </form>
+    </div>
+  </header>
+
+  <main class="board-main">
+    <div class="board-head">
+      <div class="board-head-titles">
+        <a class="back-link" href="index.html"><span class="material-symbols-outlined">arrow_back</span>Projects</a>
+        <h1 id="boardTitle" class="page-title">Board</h1>
+        <p id="boardSubtitle" class="page-subtitle">Loading…</p>
+      </div>
+      <div class="board-head-actions">
+        <div id="boardAssignees" class="avatar-stack" aria-label="Project assignees"></div>
+        <button id="addTask" class="btn primary" type="button" disabled>
+          <span class="material-symbols-outlined">add</span>Add Task
+        </button>
+      </div>
+    </div>
+
+    <!-- Columns render here. Horizontal scroll on overflow; the trailing "Add column" tile is
+         owner-only and injected by board.js. -->
+    <div id="board" class="board" aria-live="polite"></div>
+
+    <div id="boardEmpty" class="empty-state hidden">
+      <span class="material-symbols-outlined empty-icon">view_kanban</span>
+      <h2>Nothing here yet</h2>
+      <p>Add a task to get this board moving.</p>
+    </div>
+  </main>
+
+  <!-- Polite live region: announces task drag pick-up / drop to screen readers. -->
+  <div id="dragStatus" class="sr-only" role="status"></div>
+
+  <!-- Task form modal (Stitch "Task Creation Form - Final Harmonization"), reused for create + edit. -->
+  <div id="taskModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="taskTitle">
+    <div class="modal" role="document">
+      <header class="modal-head">
+        <div>
+          <h2 id="taskTitle" class="modal-title">Create New Task</h2>
+          <p id="taskSubtitle" class="modal-subtitle">Add a task to the board</p>
+        </div>
+        <button type="button" class="icon-btn" id="taskClose" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+      </header>
+
+      <form id="taskForm" class="modal-form" novalidate>
+        <!-- General Information -->
+        <section class="form-section">
+          <div class="section-head">
+            <span class="material-symbols-outlined">description</span>
+            <h3>General Information</h3>
+          </div>
+          <div class="field">
+            <label for="fTitle">Task Title <span class="req">*</span></label>
+            <input id="fTitle" name="title" type="text" maxlength="200" autocomplete="off" required aria-required="true"
+                   aria-describedby="err-title" placeholder="Enter a task heading…" />
+            <p id="err-title" class="field-error" data-error="title"></p>
+          </div>
+          <div class="field">
+            <label for="fTaskDescription">Description</label>
+            <textarea id="fTaskDescription" name="description" rows="4" maxlength="2000" aria-describedby="err-description"
+                      placeholder="Outline the scope, requirements, and expected outcomes of this task…"></textarea>
+            <p id="err-description" class="field-error" data-error="description"></p>
+          </div>
+        </section>
+
+        <!-- Details & Status -->
+        <section class="form-section">
+          <div class="section-head">
+            <span class="material-symbols-outlined">tune</span>
+            <h3>Details &amp; Status</h3>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="fStatus">Status</label>
+              <div class="select-wrap">
+                <select id="fStatus" name="columnId"></select>
+                <span class="material-symbols-outlined select-caret">expand_more</span>
+              </div>
+              <p id="err-columnId" class="field-error" data-error="columnId"></p>
+            </div>
+            <div class="field">
+              <label for="fPriority">Priority</label>
+              <div class="select-wrap">
+                <select id="fPriority" name="priority">
+                  <option value="Low">Low</option>
+                  <option value="Medium" selected>Medium</option>
+                  <option value="High">High</option>
+                  <option value="Urgent">Urgent</option>
+                </select>
+                <span class="material-symbols-outlined select-caret">expand_more</span>
+              </div>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="fTaskAssignee">Assignee</label>
+              <div class="select-wrap">
+                <select id="fTaskAssignee" name="assigneeId"></select>
+                <span class="material-symbols-outlined select-caret">expand_more</span>
+              </div>
+              <p id="err-assigneeId" class="field-error" data-error="assigneeId"></p>
+            </div>
+            <div class="field">
+              <label for="fDueDate">Due Date</label>
+              <input id="fDueDate" name="dueDate" type="date" />
+            </div>
+          </div>
+        </section>
+
+        <!-- Classification -->
+        <section class="form-section">
+          <div class="section-head">
+            <span class="material-symbols-outlined">sell</span>
+            <h3>Classification</h3>
+          </div>
+          <div class="field">
+            <label for="fLabelInput">Labels</label>
+            <div id="labelChips" class="chips" aria-live="polite"></div>
+            <div class="label-add">
+              <input id="fLabelInput" type="text" maxlength="50" autocomplete="off"
+                     placeholder="Add a label and press Enter…" aria-label="Add a label" />
+            </div>
+          </div>
+        </section>
+
+        <!-- Attachments — control only; not implemented yet (intentionally inert). -->
+        <section class="form-section">
+          <div class="section-head">
+            <span class="material-symbols-outlined">attach_file</span>
+            <h3>Attachments</h3>
+          </div>
+          <div class="dropzone" aria-disabled="true" title="Coming soon">
+            <span class="material-symbols-outlined">cloud_upload</span>
+            <p>Click or drag files to upload</p>
+            <span class="dropzone-soon">Coming soon</span>
+          </div>
+        </section>
+
+        <footer class="modal-foot">
+          <button type="button" class="btn danger ghost hidden" id="taskDelete">Delete Task</button>
+          <span class="foot-spacer"></span>
+          <button type="button" class="btn outline" id="taskCancel">Cancel</button>
+          <button type="submit" class="btn primary" id="taskSubmit">Create Task</button>
+        </footer>
+      </form>
+    </div>
+  </div>
+
+  <!-- Generic confirm dialog (task deletion, column deletion). -->
+  <div id="confirmModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" aria-describedby="confirmDesc">
+    <div class="modal modal-sm" role="document">
+      <header class="modal-head">
+        <div>
+          <h2 id="confirmTitle" class="modal-title">Are you sure?</h2>
+          <p class="modal-subtitle">This action cannot be undone.</p>
+        </div>
+        <button type="button" class="icon-btn" id="confirmClose" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+      </header>
+      <div class="modal-form">
+        <p id="confirmDesc" class="delete-desc"></p>
+        <footer class="modal-foot">
+          <button type="button" class="btn outline" id="confirmCancel">Cancel</button>
+          <button type="button" class="btn danger" id="confirmOk">Delete</button>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden" role="status"></div>
+
+  <script src="common.js?v=1"></script>
+  <script src="board.js?v=1"></script>
+</body>
+</html>

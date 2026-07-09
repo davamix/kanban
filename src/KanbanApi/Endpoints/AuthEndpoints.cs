@@ -25,9 +25,7 @@ public static class AuthEndpoints
                     + "console setup (see docs/auth.md).",
                     statusCode: StatusCodes.Status503ServiceUnavailable);
 
-            var target = returnUrl is not null && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
-                ? returnUrl
-                : "/";
+            var target = IsLocalReturnUrl(returnUrl) ? returnUrl! : "/";
             return Results.Challenge(
                 new AuthenticationProperties { RedirectUri = target },
                 [OpenIdConnectDefaults.AuthenticationScheme]);
@@ -59,5 +57,20 @@ public static class AuthEndpoints
                 displayName = user?.DisplayName ?? me.DisplayName,
             });
         }).RequireAuthorization();
+    }
+
+    /// <summary>
+    /// Open-redirect guard for the post-login <c>returnUrl</c> (ASVS V3.7.2). A bare
+    /// <see cref="Uri.IsWellFormedUriString(string, UriKind)"/> with <see cref="UriKind.Relative"/> is
+    /// insufficient: it accepts protocol-relative <c>//host</c> and <c>/\host</c> references, which a
+    /// browser resolves to an external origin, turning the post-login redirect into a phishing vector.
+    /// Only a path rooted at a single <c>/</c> (and not <c>//</c> or <c>/\</c>) is accepted — the same
+    /// rule as ASP.NET Core's <c>Url.IsLocalUrl</c>. Everything else falls back to <c>/</c>.
+    /// </summary>
+    internal static bool IsLocalReturnUrl(string? url)
+    {
+        if (string.IsNullOrEmpty(url) || url[0] != '/')
+            return false;
+        return url.Length == 1 || (url[1] != '/' && url[1] != '\\');
     }
 }

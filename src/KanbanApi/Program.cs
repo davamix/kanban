@@ -35,6 +35,9 @@ builder.Services.AddLogtoManagementClient(builder.Configuration);
 // Project read/store (per-user isolation via the DbContext global query filter).
 builder.Services.AddScoped<IProjectStore, EfProjectStore>();
 
+// Board read/store (columns + tasks; same per-user isolation, owner/member split on top).
+builder.Services.AddScoped<IBoardStore, EfBoardStore>();
+
 // Serialize DateOnly/enums in a JSON-friendly way and emit OpenAPI metadata.
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -95,7 +98,10 @@ app.Use(async (ctx, next) =>
         && !path.StartsWithSegments("/health");
     if (isHtmlNav && isAppShell && !(ctx.User.Identity?.IsAuthenticated ?? false))
     {
-        ctx.Response.Redirect("/login");
+        // Preserve the requested path so silent re-auth returns the user to where they were (e.g. a
+        // board deep link), not the default landing page. /login validates it as a local relative URL.
+        var returnUrl = ctx.Request.Path + ctx.Request.QueryString;
+        ctx.Response.Redirect($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
         return;
     }
     await next();
@@ -123,8 +129,11 @@ app.MapAuthEndpoints();
 // User directory for the assignee picker.
 app.MapUserEndpoints();
 
-// Project REST surface (project-selection screen: read side). Boards, columns, and tasks follow.
+// Project REST surface (project-selection screen).
 app.MapProjectEndpoints();
+
+// Board REST surface (a project's columns + tasks).
+app.MapBoardEndpoints();
 
 // Lightweight health probe for the container (anonymous).
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

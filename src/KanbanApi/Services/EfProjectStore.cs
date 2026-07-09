@@ -65,6 +65,8 @@ public sealed class EfProjectStore(
             project.Assignees.Add(new ProjectAssignee { ProjectId = project.Id, UserId = id });
 
         db.Projects.Add(project);
+        // Seed the default board (TODO → WIP → DONE) so a new project opens onto a usable workflow.
+        db.BoardColumns.AddRange(EfBoardStore.DefaultColumns(project.Id));
         await db.SaveChangesAsync(ct);
 
         return OwnerResponse(project, assigneeIds, directorySnapshot, me);
