@@ -1,44 +1,8 @@
 "use strict";
 
-// --- Helpers -------------------------------------------------------------
-function getCookie(name) {
-  return document.cookie.split("; ").find((c) => c.startsWith(name + "="))?.split("=")[1];
-}
-// CSRF header for cookie-authenticated mutations (server validates it; bearer callers skip it).
-function csrfHeaders() {
-  const token = getCookie("XSRF-TOKEN");
-  return token ? { "X-CSRF-TOKEN": decodeURIComponent(token) } : {};
-}
-// When the API says we're unauthenticated, send the browser to the BFF login (→ Logto hosted page).
-function guardAuth(res) {
-  if (res.status === 401) {
-    window.location.assign("/login");
-    throw new Error("Not authenticated");
-  }
-  return res;
-}
-function escapeHtml(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-function initials(name, id) {
-  const src = (name || id || "?").trim();
-  const parts = src.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return src.slice(0, 2).toUpperCase();
-}
-// Parse a "yyyy-MM-dd" DateOnly without timezone drift.
-function parseDate(s) {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-function fmtRange(start, end) {
-  const a = parseDate(start), b = parseDate(end);
-  const left = `${MONTHS[a.getMonth()]} ${a.getDate()}`;
-  const right = `${MONTHS[b.getMonth()]} ${b.getDate()}`;
-  return `${left} – ${right}`;
-}
+// Shared helpers (getCookie, csrfHeaders, guardAuth, escapeHtml, initials, date + toast + dialog
+// utilities) live in common.js, loaded before this script.
+
 // A stable, arbitrary icon per project so cards read distinctly (purely cosmetic).
 const CARD_ICONS = ["language", "smartphone", "campaign", "analytics", "rocket_launch", "dataset", "design_services", "build"];
 function iconFor(id) {
@@ -47,23 +11,8 @@ function iconFor(id) {
   return CARD_ICONS[h % CARD_ICONS.length];
 }
 
-let toastTimer;
-function showToast(message, isError = false) {
-  const el = document.getElementById("toast");
-  el.textContent = message;
-  el.classList.toggle("error", isError);
-  el.classList.remove("hidden");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.add("hidden"), 3000);
-}
-
 // --- API -----------------------------------------------------------------
-async function apiMe() {
-  const res = await fetch("/api/me");
-  if (res.status === 401) return null;
-  if (!res.ok) throw new Error("Failed to load current user");
-  return res.json();
-}
+// apiMe() lives in common.js (shared with the board screen).
 async function apiProjects() {
   const res = guardAuth(await fetch("/api/projects/"));
   if (!res.ok) throw new Error("Failed to load projects");
@@ -189,29 +138,6 @@ function renderProjects() {
 const formState = { users: [], selected: [], loaded: false, mode: "create", editId: null };
 let lastFocused = null; // element to restore focus to when the modal closes
 
-// Visible, focusable elements inside a container (for the dialog focus trap).
-function focusablesIn(container) {
-  const sel = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-  return [...container.querySelectorAll(sel)].filter((el) => el.offsetParent !== null);
-}
-
-// Shared dialog chrome for every modal: backdrop-click + Escape dismiss and a Tab focus trap (ARIA
-// dialog requirement). Kept in one place so new dialogs reuse it instead of re-copying the plumbing.
-function wireModalChrome(modal, close) {
-  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !modal.classList.contains("hidden")) close();
-  });
-  modal.addEventListener("keydown", (e) => {
-    if (e.key !== "Tab") return;
-    const f = focusablesIn(modal);
-    if (f.length === 0) return;
-    const first = f[0], last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-  });
-}
-
 function userLabel(u) {
   return u.name || u.email || u.id;
 }
@@ -295,17 +221,7 @@ async function ensureUsersLoaded() {
   populateAssigneeSelect();
 }
 
-// Copy problem-details field errors (RFC 9457: { errors: { field: [msg, …] } }) onto the inputs, or
-// fall back to a toast. Keys are camelCase field names, matching each control's [name].
-function applyProblem(problem, fallback) {
-  const errors = problem?.errors;
-  if (errors) {
-    for (const [key, msgs] of Object.entries(errors))
-      fieldError(key.charAt(0).toLowerCase() + key.slice(1), Array.isArray(msgs) ? msgs[0] : String(msgs));
-  } else {
-    showToast(problem?.title || fallback, true);
-  }
-}
+// applyProblem() lives in common.js (it calls this page's fieldError/showToast).
 
 // Reset the form for the given mode. `project` null → create (seed the current user as fixed owner
 // assignee); otherwise edit (prefill every field + the project's assignees). The owner is always me
@@ -608,8 +524,8 @@ function wireStaticHandlers() {
     renderProjects();
   });
 
-  // Opening the project board is not built yet; advertise it rather than dead-ending.
-  const openBoard = () => showToast("Project board — coming soon");
+  // Enter/click on a card opens that project's task board.
+  const openBoard = (id) => { window.location.assign(`board.html?project=${encodeURIComponent(id)}`); };
   const projectFor = (card) => state.projects.find((p) => p.id === card.dataset.id);
 
   // Card click routing: the Edit button (in the hover panel) opens the edit form; the Delete button
@@ -630,7 +546,8 @@ function wireStaticHandlers() {
       if (card) openDeleteModal(card.dataset.id);
       return;
     }
-    if (e.target.closest(".project-card")) openBoard();
+    const card = e.target.closest(".project-card");
+    if (card) openBoard(card.dataset.id);
   });
 
   // Keyboard path (only when the card itself — not an in-card button — holds focus), mirroring the
@@ -644,7 +561,7 @@ function wireStaticHandlers() {
 
     if (e.key === "Enter") {
       e.preventDefault();
-      openBoard();
+      openBoard(card.dataset.id);
     } else if ((e.key === " " || e.key === "Spacebar") && isOwner) {
       e.preventDefault();
       const project = projectFor(card);
@@ -664,7 +581,7 @@ async function init() {
   wireDragToDelete();
   try {
     state.me = await apiMe();
-    if (!state.me) { window.location.assign("/login"); return; }
+    if (!state.me) { redirectToLogin(); return; }
     renderHeaderUser(state.me);
 
     state.projects = await apiProjects();
