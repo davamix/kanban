@@ -32,6 +32,11 @@ builder.AddKanbanAuth();
 // User directory (assignee picker) via the Logto Management API.
 builder.Services.AddLogtoManagementClient(builder.Configuration);
 
+// Kanban → Calendar project mirror: on-behalf-of token exchange (RFC 8693) + the Calendar API
+// caller. Both no-op (Skipped) until the exchange client + Calendar base URL are configured.
+builder.Services.AddLogtoTokenExchange();
+builder.Services.AddCalendarMirror();
+
 // Project read/store (per-user isolation via the DbContext global query filter).
 builder.Services.AddScoped<IProjectStore, EfProjectStore>();
 

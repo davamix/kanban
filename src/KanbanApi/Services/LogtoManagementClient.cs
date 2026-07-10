@@ -11,6 +11,14 @@ public record DirectoryUser(string Id, string? Name, string? Email);
 public interface ILogtoManagementClient
 {
     Task<IReadOnlyList<DirectoryUser>> GetUsersAsync(string? search, CancellationToken ct = default);
+
+    /// <summary>
+    /// Mints a short-lived, one-time impersonation <c>subjectToken</c> for the given user via the
+    /// Management API — the first leg of on-behalf-of token exchange (RFC 8693). Returns null when the
+    /// Management client is unconfigured or the request fails (caller degrades gracefully). The user is
+    /// identified by their Logto <c>sub</c>; this is never derived from client input.
+    /// </summary>
+    Task<string?> MintSubjectTokenAsync(string userId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -60,6 +68,40 @@ public sealed class LogtoManagementClient(
             // project creation — degrade to an empty directory (owner-only assignment) instead of 500.
             logger.LogWarning(ex, "Logto directory unreachable at {Url}; treating as empty. Check Logto:Management:Endpoint.", url);
             return [];
+        }
+    }
+
+    public async Task<string?> MintSubjectTokenAsync(string userId, CancellationToken ct = default)
+    {
+        var endpoint = config["Logto:Management:Endpoint"];
+        var clientId = config["Logto:Management:ClientId"];
+        if (string.IsNullOrWhiteSpace(endpoint) || string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(userId))
+            return null;
+
+        var token = await GetTokenAsync(ct);
+        if (token is null)
+            return null;
+
+        var url = $"{endpoint.TrimEnd('/')}/api/subject-tokens";
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            req.Content = JsonContent.Create(new { userId });
+            using var res = await http.SendAsync(req, ct);
+            if (!res.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Logto subject-token request returned {Status}; on-behalf-of exchange unavailable.", (int)res.StatusCode);
+                return null;
+            }
+
+            var payload = await res.Content.ReadFromJsonAsync<SubjectTokenResponse>(cancellationToken: ct);
+            return string.IsNullOrWhiteSpace(payload?.SubjectToken) ? null : payload.SubjectToken;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Logto subject-token endpoint unreachable at {Url}; on-behalf-of exchange unavailable.", url);
+            return null;
         }
     }
 
@@ -116,6 +158,9 @@ public sealed class LogtoManagementClient(
     private sealed record TokenResponse(
         [property: JsonPropertyName("access_token")] string? AccessToken,
         [property: JsonPropertyName("expires_in")] int ExpiresIn);
+
+    private sealed record SubjectTokenResponse(
+        [property: JsonPropertyName("subjectToken")] string? SubjectToken);
 
     private sealed record LogtoUser(
         [property: JsonPropertyName("id")] string Id,

@@ -54,6 +54,9 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
             services.AddSingleton<IAntiforgery, NoopAntiforgery>();
             services.AddSingleton<ILogtoManagementClient, FakeLogtoManagementClient>();
+            // Deterministic Calendar mirror (outcome driven by project name) so create-path tests
+            // don't need Logto/Calendar. Replaces the real HttpClient-backed CalendarMirror.
+            services.AddSingleton<ICalendarMirror, FakeCalendarMirror>();
         });
     }
 

@@ -72,6 +72,13 @@ services:
       - LOGTO__MANAGEMENT__CLIENTID=${LOGTO__MANAGEMENT__CLIENTID:-}
       - LOGTO__MANAGEMENT__CLIENTSECRET=${LOGTO__MANAGEMENT__CLIENTSECRET:-}
       - LOGTO__MANAGEMENT__RESOURCE=${LOGTO__MANAGEMENT__RESOURCE:-https://default.logto.app/api}
+      # Kanban → Calendar mirror (RFC 8693). Optional: unset ⇒ mirroring is off (MirrorStatus=Skipped).
+      # Turn on by setting all four in .env (exchange client + Calendar base URL + Calendar audience).
+      # See docs/ecosystem-integration.md §6/§7 and ADR 0009.
+      - LOGTO__EXCHANGE__CLIENTID=${LOGTO__EXCHANGE__CLIENTID:-}
+      - LOGTO__EXCHANGE__CLIENTSECRET=${LOGTO__EXCHANGE__CLIENTSECRET:-}
+      - CALENDAR__API__BASEURL=${CALENDAR__API__BASEURL:-}
+      - CALENDAR__API__RESOURCE=${CALENDAR__API__RESOURCE:-}
     restart: unless-stopped
 
   caddy:

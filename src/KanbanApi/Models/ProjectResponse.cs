@@ -18,7 +18,11 @@ public sealed record ProjectResponse(
     string OwnerId,
     bool IsOwner,
     string Role,
-    IReadOnlyList<AssigneeSummary> Assignees);
+    IReadOnlyList<AssigneeSummary> Assignees,
+    // Calendar-mirror outcome, surfaced so the card can show a "sync failed" hint. Server-owned
+    // (never client-set); serialized as the enum name (Skipped/Mirrored/Failed).
+    ProjectMirrorStatus MirrorStatus,
+    string? CalendarProjectId);
 
 /// <summary>
 /// Create-project payload from the creation form. The owner is taken from the authenticated

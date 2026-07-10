@@ -139,6 +139,13 @@ audience**. See §7 for the exact objects Kanban registers.
 
 ## 6 · Kanban ↔ Calendar integration
 
+> **Status: implemented (create-only), config-gated off.** The project mirror described below ships in
+> [ADR 0009](decisions/0009-calendar-mirror.md): `ICalendarMirror` + `ILogtoTokenExchange` +
+> `ILogtoManagementClient.MintSubjectTokenAsync`, called best-effort from `EfProjectStore.CreateAsync`.
+> It stays inert (projects save as `MirrorStatus = Skipped`) until `LOGTO__EXCHANGE__*` +
+> `CALENDAR__API__BASEURL` are set — see §7. End-to-end verification needs the integrated stack (running
+> Calendar + shared Logto with the exchange client provisioned). Edit/delete propagation is deferred.
+
 **What is mirrored:**
 
 | Kanban action | Effect in Calendar |
@@ -199,6 +206,28 @@ exchange above; JSON is camelCase; dates are `yyyy-MM-dd`):
   apps share Logto.)
 
 Discover the live contract from Calendar's generated OpenAPI document rather than hardcoding shapes.
+
+**Configuration & hostnames (a footgun worth stating).** The mirror is a **back-channel** call from
+Kanban's server-side `HttpClient`, so `CALENDAR__API__BASEURL` uses a **plain host reachable
+server-to-server** — a Docker service name (`http://calendar:8080`) in compose, or the proxy host in a
+real deployment. It is **not** a `*.localhost` browser address: those resolve to `127.0.0.1` (RFC 6761)
+and from inside a container point at the container itself. Contrast the **issuer** (`LOGTO__ISSUER`),
+which deliberately uses the Caddy-aliased `*.localhost` host because OIDC has *both* a browser redirect
+leg and a server back-channel leg and must present one identical URL to both. `CALENDAR__API__RESOURCE`
+(Calendar's audience) is **required** to enable mirroring — unset ⇒ off (`MirrorStatus = Skipped`).
+
+**Running the mirror locally against a real Calendar (verified 2026-07-10).** Calendar is not bundled
+in Kanban's compose (no app bundles another); run it as a sidecar on Kanban's network:
+
+1. `docker pull ghcr.io/davamix/calendar:latest` (Calendar auto-migrates its schema on startup).
+2. In the shared Postgres, create Calendar's DB + least-privilege role (mirrors `db/init/30-app-role.sh`):
+   `CREATE ROLE calendar_app LOGIN … PASSWORD '…'; CREATE DATABASE calendar OWNER calendar_app;` then, in
+   the new DB, `ALTER SCHEMA public OWNER TO calendar_app;`.
+3. `docker run --name calendar --network <kanban-compose-network> …` with
+   `ConnectionStrings__Calendar=Host=db;…;Database=calendar;Username=calendar_app;…`, the **same**
+   `LOGTO__ISSUER` Kanban uses (so the exchanged token's `iss` matches), and `LOGTO__AUDIENCE=https://calendar.api`.
+4. Provision the §7 exchange client in Logto, then set `LOGTO__EXCHANGE__*` + `CALENDAR__API__BASEURL=http://calendar:8080`
+   + `CALENDAR__API__RESOURCE=https://calendar.api` in Kanban's `.env` and recreate the Kanban container.
 
 ## 7 · Logto objects to create for Kanban
 
