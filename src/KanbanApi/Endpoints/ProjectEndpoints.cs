@@ -5,10 +5,10 @@ namespace KanbanApi.Endpoints;
 
 /// <summary>
 /// The project REST surface: list the projects the signed-in user owns or is assigned to, create a
-/// new project (the caller becomes the owner), and delete a project (owner-only). Update and
-/// assignee management arrive with later screens. The whole group requires authentication; per-user
-/// read isolation is enforced by the store's global query filter, and the owner is always taken from
-/// the session — delete additionally re-checks ownership before removing.
+/// new project (the caller becomes the owner), update it (owner-only, incl. its assignee set), and
+/// delete it (owner-only). The whole group requires authentication; per-user read isolation is
+/// enforced by the store's global query filter, and the owner is always taken from the session —
+/// update and delete additionally re-check ownership before mutating.
 /// </summary>
 public static class ProjectEndpoints
 {
