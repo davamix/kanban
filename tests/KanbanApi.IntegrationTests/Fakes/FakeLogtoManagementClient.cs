@@ -19,4 +19,9 @@ public sealed class FakeLogtoManagementClient : ILogtoManagementClient
             q = q.Where(u => (u.Name ?? "").Contains(search, StringComparison.OrdinalIgnoreCase));
         return Task.FromResult<IReadOnlyList<DirectoryUser>>(q.ToList());
     }
+
+    // The mirror path isn't exercised through this fake in integration tests (a FakeCalendarMirror
+    // stands in for the whole flow); return a token so the contract is satisfied if ever called.
+    public Task<string?> MintSubjectTokenAsync(string userId, CancellationToken ct = default)
+        => Task.FromResult<string?>($"subject-token-for-{userId}");
 }

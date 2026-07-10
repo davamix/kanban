@@ -169,8 +169,9 @@ body {
   color: var(--color-on-error); background: var(--color-error);
   outline: 2px solid var(--color-primary); outline-offset: 2px;
 }
-/* When the reveal button is focused, hide the co-located Owner badge so the red pill owns the corner. */
-.project-card:has(.card-delete:focus) .badge.owner { visibility: hidden; }
+/* When the reveal button is focused, hide the co-located Owner badge + mirror icon so the red pill owns the corner. */
+.project-card:has(.card-delete:focus) .badge.owner,
+.project-card:has(.card-delete:focus) .card-badges .mirror-status { visibility: hidden; }
 
 /* Hover/focus action panel: an owner-only drawer that reveals below the card, holding the Edit
    affordance (Space is the keyboard equivalent; Enter/click opens the board). Absolutely positioned
@@ -222,6 +223,14 @@ body {
 }
 .badge.owner { background: var(--color-primary-container); color: var(--color-on-primary-container); }
 .badge.shared { background: var(--color-surface-container-high); color: var(--color-on-surface-variant); }
+
+/* Owner/mirror badges sit together at the card's top-right. */
+.card-badges { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+/* Calendar-mirror indicator: a small status icon. Failed is the load-bearing one (amber-on-nothing
+   would be too quiet, red-container reads as "attention"); Mirrored is a muted, unobtrusive cue. */
+.mirror-status { font-size: 18px; line-height: 1; flex: none; }
+.mirror-status.failed { color: var(--color-error); }
+.mirror-status.synced { color: var(--color-on-surface-variant); opacity: 0.7; }
 
 .card-desc {
   margin: 0; font: var(--type-body-sm); color: var(--color-on-surface-variant);

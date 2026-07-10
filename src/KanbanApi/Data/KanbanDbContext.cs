@@ -54,6 +54,8 @@ public sealed class KanbanDbContext : DbContext, IDataProtectionKeyContext
             e.Property(p => p.Budget).HasPrecision(18, 2);
             e.Property(p => p.OwnerId).IsRequired().HasMaxLength(64);
             e.Property(p => p.CreatedBy).HasMaxLength(64);
+            e.Property(p => p.MirrorStatus).HasConversion<string>().HasMaxLength(20);
+            e.Property(p => p.CalendarProjectId).HasMaxLength(200);
             e.HasIndex(p => p.OwnerId);
             e.HasOne<AppUser>().WithMany()
                 .HasForeignKey(p => p.OwnerId).OnDelete(DeleteBehavior.Restrict);

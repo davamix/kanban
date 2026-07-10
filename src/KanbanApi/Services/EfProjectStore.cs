@@ -10,7 +10,8 @@ namespace KanbanApi.Services;
 /// isolation is enforced one layer down and fails closed when no user is set.
 /// </summary>
 public sealed class EfProjectStore(
-    KanbanDbContext db, ICurrentUser currentUser, ILogtoManagementClient directory) : IProjectStore
+    KanbanDbContext db, ICurrentUser currentUser, ILogtoManagementClient directory,
+    ICalendarMirror calendarMirror, ILogger<EfProjectStore> logger) : IProjectStore
 {
     public async Task<IReadOnlyList<ProjectResponse>> ListVisibleAsync(CancellationToken ct = default)
     {
@@ -35,7 +36,9 @@ public sealed class EfProjectStore(
             Role: p.OwnerId == me ? "owner" : "assignee",
             Assignees: p.Assignees
                 .Select(a => new AssigneeSummary(a.UserId, a.User?.DisplayName))
-                .ToList()))
+                .ToList(),
+            p.MirrorStatus,
+            p.CalendarProjectId))
             .ToList();
     }
 
@@ -68,6 +71,22 @@ public sealed class EfProjectStore(
         // Seed the default board (TODO → WIP → DONE) so a new project opens onto a usable workflow.
         db.BoardColumns.AddRange(EfBoardStore.DefaultColumns(project.Id));
         await db.SaveChangesAsync(ct);
+
+        // Best-effort mirror into Calendar (on-behalf-of the owner, RFC 8693). Must never fail
+        // project creation: the mirror itself never throws, and this whole block is belt-and-braces
+        // guarded so a bug or a second-save error still leaves the project created (as Skipped).
+        // See docs/ecosystem-integration.md §6.
+        try
+        {
+            var (status, calendarProjectId) = await calendarMirror.MirrorProjectAsync(project, assigneeIds, ct);
+            project.MirrorStatus = status;
+            project.CalendarProjectId = calendarProjectId;
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Calendar mirror bookkeeping failed for project {ProjectId}; leaving it unmirrored.", project.Id);
+        }
 
         return OwnerResponse(project, assigneeIds, directorySnapshot, me);
     }
@@ -114,7 +133,8 @@ public sealed class EfProjectStore(
 
         return new ProjectResponse(
             project.Id, project.Name, project.Description, project.StartDate, project.EndDate,
-            project.Budget, me, IsOwner: true, Role: "owner", assignees);
+            project.Budget, me, IsOwner: true, Role: "owner", assignees,
+            project.MirrorStatus, project.CalendarProjectId);
     }
 
     public async Task<ProjectUpdateResult> UpdateAsync(Guid id, UpdateProjectRequest request, CancellationToken ct = default)

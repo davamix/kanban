@@ -72,13 +72,35 @@ function avatarStack(assignees) {
   return `<div class="avatar-stack">${chips.join("")}</div>`;
 }
 
+// Maps a project's Calendar-mirror status to a small card indicator (icon + tooltip) and a spoken
+// fragment appended to the card's aria-label. Unknown/Skipped → nothing.
+function mirrorBadge(status) {
+  if (status === "Failed") {
+    return {
+      html: `<span class="mirror-status failed material-symbols-outlined" title="Calendar sync failed" aria-hidden="true">sync_problem</span>`,
+      spoken: " Calendar sync failed.",
+    };
+  }
+  if (status === "Mirrored") {
+    return {
+      html: `<span class="mirror-status synced material-symbols-outlined" title="Synced to Calendar" aria-hidden="true">event_available</span>`,
+      spoken: " Synced to Calendar.",
+    };
+  }
+  return { html: "", spoken: "" };
+}
+
 function cardHtml(p) {
   const badge = p.isOwner
     ? `<span class="badge owner">Owner</span>`
     : `<span class="badge shared">Shared</span>`;
+  // Calendar-mirror hint — owner-only (they created the project; the mirror runs on create). Failed
+  // is the one that matters (the Calendar copy is missing); Mirrored is a subtle "synced" cue;
+  // Skipped (feature off / not attempted) shows nothing. See ADR 0009 / ecosystem-integration.md §6.
+  const mirror = p.isOwner ? mirrorBadge(p.mirrorStatus) : { html: "", spoken: "" };
   // A spoken summary for screen readers (the card's visual bits are decorative on their own).
   const ariaLabel = escapeHtml(
-    `Project: ${p.name}. ${p.isOwner ? "Owned by you" : "Shared with you"}. ${fmtRange(p.startDate, p.endDate)}.`);
+    `Project: ${p.name}. ${p.isOwner ? "Owned by you" : "Shared with you"}. ${fmtRange(p.startDate, p.endDate)}.${mirror.spoken}`);
   // Only the owner can edit or delete a project, so only owner cards are draggable and carry those
   // affordances. Card interactions (all mirrored for keyboard + assistive tech, advertised via
   // aria-keyshortcuts): Enter/click opens the project's task board (next screen); Space opens the
@@ -105,7 +127,7 @@ function cardHtml(p) {
           <span class="card-icon material-symbols-outlined" style="font-variation-settings:'FILL' 1;">${iconFor(p.id)}</span>
           <h3 class="card-title" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</h3>
         </div>
-        ${badge}
+        <div class="card-badges">${mirror.html}${badge}</div>
       </div>
       <p class="card-desc">${escapeHtml(p.description || "No description.")}</p>
       <div class="card-foot">

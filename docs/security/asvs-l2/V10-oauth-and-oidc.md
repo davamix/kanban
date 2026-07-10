@@ -6,7 +6,8 @@
 > Resource Server** (`/api/*` JWT-bearer). Logto is the Authorization Server / OpenID Provider,
 > so V10.4 (AS) / V10.6 (OP) / V10.7 (consent) are largely Logto-side. When Kanban calls Calendar
 > via RFC 8693 token exchange it is also an **OAuth client** performing on-behalf-of delegation —
-> see [../../ecosystem-integration.md](../../ecosystem-integration.md) §6 (implemented later).
+> see [../../ecosystem-integration.md](../../ecosystem-integration.md) §6 and V10.2.4 below
+> (implemented in [ADR 0009](../../decisions/0009-calendar-mirror.md), config-gated off).
 
 ## Status summary
 
@@ -28,6 +29,7 @@
 |-----|---|-------|-------|
 | V10.2.1 | 2 | ✅ | PKCE (default in .NET 6+) **and** `state` validation against the correlation cookie. |
 | V10.2.2 | 2 | ✅ | One AS (Logto); `Authority` pinned; `iss` validated. |
+| V10.2.4 | 2 | ✅ | **On-behalf-of delegation (RFC 8693).** The Kanban→Calendar mirror exchanges an impersonation subject token for a token scoped to Calendar's audience, authenticating as the confidential exchange client (HTTP Basic). The delegated user is the project owner's `sub` taken from the entity/session — never a request field — so the Calendar owner can't be steered by client input. [LogtoTokenExchange.cs](../../../src/KanbanApi/Services/LogtoTokenExchange.cs), [CalendarMirror.cs](../../../src/KanbanApi/Services/CalendarMirror.cs); see [ADR 0009](../../decisions/0009-calendar-mirror.md). |
 
 ## V10.3 — Resource server
 
