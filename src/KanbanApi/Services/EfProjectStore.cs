@@ -175,6 +175,26 @@ public sealed class EfProjectStore(
 
         await db.SaveChangesAsync(ct);
 
+        // Best-effort propagation of the edit to Calendar, on-behalf-of the owner. Only for projects that
+        // already have a Calendar counterpart — a Skipped/Failed project has none to update (create and
+        // edit stay separate; Failed-mirror retry is a separate deferred feature). The delta excludes the
+        // owner, which Calendar auto-manages. Belt-and-braces guarded so it can never fail the edit.
+        // See docs/ecosystem-integration.md §6.
+        if (project.CalendarProjectId is not null)
+        {
+            var addedAssignees = desiredIds.Where(uid => uid != me && !currentIds.Contains(uid)).ToList();
+            var removedAssignees = currentIds.Where(uid => uid != me && !desiredIds.Contains(uid)).ToList();
+            try
+            {
+                project.MirrorStatus = await calendarMirror.UpdateProjectAsync(project, addedAssignees, removedAssignees, ct);
+                await db.SaveChangesAsync(ct);   // record the refreshed status (Mirrored, or Failed = drift).
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Calendar mirror update bookkeeping failed for project {ProjectId}.", project.Id);
+            }
+        }
+
         var response = OwnerResponse(project, desiredIds, directorySnapshot, me);
         return new ProjectUpdateResult(ProjectUpdateOutcome.Updated, response);
     }
@@ -192,6 +212,22 @@ public sealed class EfProjectStore(
         // Delete is owner-only: an assignee can read the project but must not remove it.
         if (project.OwnerId != me)
             return ProjectDeleteOutcome.Forbidden;
+
+        // Best-effort propagation of the delete to Calendar (on-behalf-of the owner) before the local
+        // removal, while we still hold the entity's CalendarProjectId. Only for mirrored projects. The
+        // local delete proceeds regardless of Calendar's outcome: a failure just logs and leaves a
+        // Calendar orphan (same posture as a failed create). See docs/ecosystem-integration.md §6.
+        if (project.CalendarProjectId is not null)
+        {
+            try
+            {
+                await calendarMirror.DeleteProjectAsync(project, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Calendar mirror delete failed for project {ProjectId}; leaving Calendar orphan.", project.Id);
+            }
+        }
 
         db.Projects.Remove(project);   // project_assignees rows cascade (FK OnDelete: Cascade).
         await db.SaveChangesAsync(ct);

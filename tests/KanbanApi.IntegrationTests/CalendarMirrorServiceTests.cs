@@ -164,4 +164,128 @@ public sealed class CalendarMirrorServiceTests
 
         exchange.RequestedResource.Should().Be("https://calendar.custom");
     }
+
+    private static Project Mirrored(string owner = "owner-1", string name = "Proj", string calId = "cal-1")
+    {
+        var p = NewProject(owner, name);
+        p.CalendarProjectId = calId;
+        return p;
+    }
+
+    [Fact]
+    public async Task Update_PutsScalars_RemovesThenAddsAssignees_ReturnsMirrored()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var exchange = new FakeExchange("obo-token");
+        var sut = new CalendarMirror(new HttpClient(handler), Config(), exchange, NullLogger<CalendarMirror>.Instance);
+        var project = Mirrored(owner: "owner-1", name: "Renamed");
+
+        var status = await sut.UpdateProjectAsync(project, addedAssigneeIds: ["user-b"], removedAssigneeIds: ["user-a"]);
+
+        status.Should().Be(ProjectMirrorStatus.Mirrored);
+        exchange.RequestedUserId.Should().Be("owner-1");   // OBO the owner, from the entity
+
+        var put = handler.Calls.Should().ContainSingle(c => c.Method == "PUT").Subject;
+        put.Path.Should().Be("/api/projects/cal-1");
+        put.Authorization.Should().Be("Bearer obo-token");
+        put.Body.Should().Contain("\"name\":\"Renamed\"").And.Contain("\"startDate\":\"2026-07-01\"");
+
+        handler.Calls.Should().ContainSingle(c => c.Method == "DELETE" && c.Path == "/api/projects/cal-1/assignees/user-a");
+        var add = handler.Calls.Should().ContainSingle(c => c.Method == "POST" && c.Path == "/api/projects/cal-1/assignees").Subject;
+        add.Body.Should().Contain("user-b");
+    }
+
+    [Fact]
+    public async Task Update_WhenPutErrors_ReturnsFailed_WithoutTouchingAssignees()
+    {
+        var handler = new RecordingHandler(req =>
+            new HttpResponseMessage(req.Method == HttpMethod.Put ? HttpStatusCode.InternalServerError : HttpStatusCode.OK));
+        var sut = new CalendarMirror(new HttpClient(handler), Config(), new FakeExchange("obo-token"), NullLogger<CalendarMirror>.Instance);
+
+        var status = await sut.UpdateProjectAsync(Mirrored(), addedAssigneeIds: ["user-b"], removedAssigneeIds: ["user-a"]);
+
+        status.Should().Be(ProjectMirrorStatus.Failed);
+        handler.Calls.Should().OnlyContain(c => c.Method == "PUT");   // bailed before assignee reconcile
+    }
+
+    [Fact]
+    public async Task Update_WhenExchangeUnavailable_ReturnsFailed_SurfacingDrift()
+    {
+        // The project is already mirrored (has a counterpart), so a transient exchange/Logto outage
+        // means this edit did NOT land — that's drift and must surface as Failed, never silently
+        // downgrade Mirrored → Skipped ("no counterpart"). See ADR 0010 §4.
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var sut = new CalendarMirror(new HttpClient(handler), Config(), new FakeExchange(null), NullLogger<CalendarMirror>.Instance);
+
+        var status = await sut.UpdateProjectAsync(Mirrored(), [], []);
+
+        status.Should().Be(ProjectMirrorStatus.Failed);
+        handler.Calls.Should().BeEmpty();   // no token → never touches Calendar
+    }
+
+    [Fact]
+    public async Task Update_WhenCalendarUnreachable_ReturnsFailed_NeverThrows()
+    {
+        var handler = new RecordingHandler(_ => throw new HttpRequestException("Connection refused"));
+        var sut = new CalendarMirror(new HttpClient(handler), Config(), new FakeExchange("obo-token"), NullLogger<CalendarMirror>.Instance);
+
+        var status = await sut.UpdateProjectAsync(Mirrored(), [], []);
+
+        status.Should().Be(ProjectMirrorStatus.Failed);
+    }
+
+    [Fact]
+    public async Task Delete_SendsDelete_ReturnsTrue()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var exchange = new FakeExchange("obo-token");
+        var sut = new CalendarMirror(new HttpClient(handler), Config(), exchange, NullLogger<CalendarMirror>.Instance);
+
+        var ok = await sut.DeleteProjectAsync(Mirrored(owner: "owner-1"));
+
+        ok.Should().BeTrue();
+        exchange.RequestedUserId.Should().Be("owner-1");
+        var del = handler.Calls.Should().ContainSingle().Subject;
+        del.Method.Should().Be("DELETE");
+        del.Path.Should().Be("/api/projects/cal-1");
+        del.Authorization.Should().Be("Bearer obo-token");
+    }
+
+    [Fact]
+    public async Task Delete_WhenAlreadyGone_ReturnsTrue()
+    {
+        // A 404 means the Calendar counterpart is already gone — treat it as a successful delete.
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        var sut = new CalendarMirror(new HttpClient(handler), Config(), new FakeExchange("obo-token"), NullLogger<CalendarMirror>.Instance);
+
+        (await sut.DeleteProjectAsync(Mirrored())).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Delete_WhenServerErrors_ReturnsFalse()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var sut = new CalendarMirror(new HttpClient(handler), Config(), new FakeExchange("obo-token"), NullLogger<CalendarMirror>.Instance);
+
+        (await sut.DeleteProjectAsync(Mirrored())).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Delete_WhenUnreachable_ReturnsFalse_NeverThrows()
+    {
+        var handler = new RecordingHandler(_ => throw new HttpRequestException("Connection refused"));
+        var sut = new CalendarMirror(new HttpClient(handler), Config(), new FakeExchange("obo-token"), NullLogger<CalendarMirror>.Instance);
+
+        (await sut.DeleteProjectAsync(Mirrored())).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Delete_WhenBaseUrlUnset_ReturnsFalse_WithoutCalling()
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var sut = new CalendarMirror(new HttpClient(handler), Config(baseUrl: null), new FakeExchange("obo-token"), NullLogger<CalendarMirror>.Instance);
+
+        (await sut.DeleteProjectAsync(Mirrored())).Should().BeFalse();
+        handler.Calls.Should().BeEmpty();
+    }
 }

@@ -139,18 +139,22 @@ audience**. See §7 for the exact objects Kanban registers.
 
 ## 6 · Kanban ↔ Calendar integration
 
-> **Status: implemented (create-only), config-gated off.** The project mirror described below ships in
-> [ADR 0009](decisions/0009-calendar-mirror.md): `ICalendarMirror` + `ILogtoTokenExchange` +
-> `ILogtoManagementClient.MintSubjectTokenAsync`, called best-effort from `EfProjectStore.CreateAsync`.
-> It stays inert (projects save as `MirrorStatus = Skipped`) until `LOGTO__EXCHANGE__*` +
-> `CALENDAR__API__BASEURL` are set — see §7. End-to-end verification needs the integrated stack (running
-> Calendar + shared Logto with the exchange client provisioned). Edit/delete propagation is deferred.
+> **Status: implemented (create + edit/delete), config-gated off.** The project mirror described below
+> ships in [ADR 0009](decisions/0009-calendar-mirror.md) (create) and
+> [ADR 0010](decisions/0010-calendar-mirror-edit-delete.md) (edit/delete): `ICalendarMirror` +
+> `ILogtoTokenExchange` + `ILogtoManagementClient.MintSubjectTokenAsync`, called best-effort from
+> `EfProjectStore.CreateAsync` / `UpdateAsync` / `DeleteAsync`. It stays inert (projects save as
+> `MirrorStatus = Skipped`) until `LOGTO__EXCHANGE__*` + `CALENDAR__API__BASEURL` are set — see §7.
+> End-to-end verification needs the integrated stack (running Calendar + shared Logto with the exchange
+> client provisioned).
 
 **What is mirrored:**
 
 | Kanban action | Effect in Calendar |
 |---|---|
 | Create a Kanban **project** (name, dates, assignees) | Kanban calls Calendar's API to create a Calendar **project** owned by the same user, with the same assignees |
+| Edit a Kanban **project** | Kanban PUTs the new name/description/dates and reconciles the assignee delta (add/remove) on the mirrored project — only for projects already mirrored (`CalendarProjectId` set) |
+| Delete a Kanban **project** | Kanban deletes the mirrored Calendar project (best-effort; a failure leaves a Calendar orphan, the Kanban delete still succeeds) |
 | Create a Kanban **task** | **Nothing** — tasks are not mirrored |
 | A user is a Kanban project assignee | They see the mirrored project on their Calendar (Calendar's existing owner+assignee model) |
 
@@ -201,11 +205,18 @@ exchange above; JSON is camelCase; dates are `yyyy-MM-dd`):
 - `POST /api/projects` — body `{ "name", "description"?, "startDate", "endDate", "color"? }`.
   Owner is set server-side from the token `sub` (the creator is auto-added as an assignee). Returns
   the created project incl. `id`.
+- `PUT /api/projects/{id}` — same body as create; replaces the project's scalar fields. **Owner-only.**
+- `DELETE /api/projects/{id}` — removes the project. **Owner-only** (a `404` = already gone, treated as
+  a successful delete).
 - `POST /api/projects/{id}/assignees` — body `{ "userId": "<logto sub>" }`, **owner-only**. Call
   once per additional assignee. (Assignee `userId` values are Logto `sub`s — portable because both
   apps share Logto.)
+- `DELETE /api/projects/{id}/assignees/{userId}` — removes an assignee. **Owner-only.** Used to
+  reconcile the assignee set on edit.
 
-Discover the live contract from Calendar's generated OpenAPI document rather than hardcoding shapes.
+These shapes were verified against Calendar's generated OpenAPI (`/openapi/v1.json`) on 2026-07-10 (all
+success responses are `200`). Kanban's client stays success-code-agnostic (`IsSuccessStatusCode`).
+Re-discover the live contract from that document rather than hardcoding shapes.
 
 **Configuration & hostnames (a footgun worth stating).** The mirror is a **back-channel** call from
 Kanban's server-side `HttpClient`, so `CALENDAR__API__BASEURL` uses a **plain host reachable

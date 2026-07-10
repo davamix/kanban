@@ -3,11 +3,11 @@ using KanbanApi.Models;
 namespace KanbanApi.Services;
 
 /// <summary>
-/// Read access to projects for the current user. Reads are isolated to the current user (owner or
-/// assignee) by the DbContext global query filter; the store maps entities to the
-/// <see cref="ProjectResponse"/> read model, resolving each project's assignees to display names
-/// and the caller's own relationship (owner vs assignee). Create/update/assignee mutations are
-/// added with the project-creation screen.
+/// Read and mutation access to projects for the current user. Reads are isolated to the current user
+/// (owner or assignee) by the DbContext global query filter; the store maps entities to the
+/// <see cref="ProjectResponse"/> read model, resolving each project's assignees to display names and
+/// the caller's own relationship (owner vs assignee). Create/update/delete are owner-scoped and, when
+/// configured, mirror the change into Calendar best-effort (see <see cref="ICalendarMirror"/>).
 /// </summary>
 public interface IProjectStore
 {
