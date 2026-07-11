@@ -20,8 +20,7 @@ namespace KanbanApi.IntegrationTests.Fixtures;
 /// </summary>
 public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder()
-        .WithImage("pgvector/pgvector:pg17")
+    private readonly PostgreSqlContainer _db = new PostgreSqlBuilder("pgvector/pgvector:pg17")
         .Build();
 
     async Task IAsyncLifetime.InitializeAsync() => await _db.StartAsync();
