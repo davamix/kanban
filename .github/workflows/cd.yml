@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Build once and load locally so Trivy scans the EXACT image before it is published.
       - name: Build image (load for scanning)
