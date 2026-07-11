@@ -65,7 +65,7 @@ jobs:
 
       # Build once and load locally so Trivy scans the EXACT image before it is published.
       - name: Build image (load for scanning)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -120,7 +120,7 @@ jobs:
       # Re-runs the build with push: true; the buildx cache from the scan build is reused, so
       # this pushes layers without a full rebuild.
       - name: Publish to GHCR
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
