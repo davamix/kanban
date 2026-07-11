@@ -67,11 +67,11 @@ var forwarded = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
 };
-forwarded.KnownNetworks.Clear();
+forwarded.KnownIPNetworks.Clear();
 forwarded.KnownProxies.Clear();
-forwarded.KnownNetworks.Add(new IPNetwork(System.Net.IPAddress.Parse("10.0.0.0"), 8));
-forwarded.KnownNetworks.Add(new IPNetwork(System.Net.IPAddress.Parse("172.16.0.0"), 12));
-forwarded.KnownNetworks.Add(new IPNetwork(System.Net.IPAddress.Parse("192.168.0.0"), 16));
+forwarded.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("10.0.0.0/8"));
+forwarded.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("172.16.0.0/12"));
+forwarded.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("192.168.0.0/16"));
 app.UseForwardedHeaders(forwarded);
 
 app.UseAuthentication();
